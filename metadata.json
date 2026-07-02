@@ -1,6 +1,11 @@
 {
-  "name": "نظام تصحيح دروس الطلاب",
-  "description": "نظام ذكي ومتطور لتصحيح دروس الطلاب بالصوت والصورة، يحتوي على سبورة تفاعلية بأدوات احترافية للرسم والكتابة والملصقات، مع تسجيل الملاحظات الصوتية والربط المباشر بـ Google Sheets.",
-  "requestFramePermissions": ["camera", "microphone"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "name": "لوحة تصحيح الدروس التفاعلية",
+  "description": "منصة تصحيح تفاعلية متصلة بجداول قوقل (Google Sheets) ومجلدات قوقل درايف (Google Drive) لتصحيح صور الدروس وتسجيلات الطلاب.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
