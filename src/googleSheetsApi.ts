@@ -228,6 +228,17 @@ export const saveSheetsConfig = (webAppUrl: string, spreadsheetId: string) => {
   localStorage.setItem('SPREADSHEET_ID', spreadsheetId.trim());
 };
 
+// Test Google Sheets Connection using unified fetch helper (with fallback for Vercel/production)
+export const testSheetsConnection = async (webAppUrl: string, spreadsheetId: string): Promise<boolean> => {
+  // Save first, because fetchFromSheetsApi reads from local storage configuration
+  saveSheetsConfig(webAppUrl, spreadsheetId);
+  const result = await fetchFromSheetsApi('getTableData');
+  if (result && result.success) {
+    return true;
+  }
+  throw new Error(result?.error || 'السكربت لم يرجع استجابة ناجحة');
+};
+
 // Check if live integration is enabled
 export const isLiveMode = (): boolean => {
   const { webAppUrl } = getSheetsConfig();
@@ -258,7 +269,8 @@ export const getProxyUrl = (urlOrId: string): string => {
     return trimmed;
   }
 
-  const directDriveUrl = `https://docs.google.com/uc?export=download&id=${fileId || trimmed}`;
+  // Google's direct static usercontent endpoint which has built-in CORS support and bypasses virus/cookie barriers!
+  const directDriveUrl = fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : trimmed;
 
   // Check if we are running in development or AI Studio preview container (where backend proxy is active)
   const isLocalOrDev = window.location.hostname === 'localhost' || 

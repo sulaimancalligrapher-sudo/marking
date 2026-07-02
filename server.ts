@@ -61,21 +61,29 @@ async function startServer() {
 
     try {
       let targetUrl = '';
+      let fallbackUrl = '';
       if (fileId) {
-        targetUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
+        targetUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
+        fallbackUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
       } else {
         // Extract ID from full URL if possible
         const fileIdMatch = fileUrl.match(/(?:id=|\/d\/|folders\/)([a-zA-Z0-9-_]{25,})[/\?]?/);
         if (fileIdMatch && fileIdMatch[1]) {
-          targetUrl = `https://docs.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+          targetUrl = `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+          fallbackUrl = `https://docs.google.com/uc?export=download&id=${fileIdMatch[1]}`;
         } else {
           targetUrl = fileUrl;
         }
       }
 
-      const response = await fetch(targetUrl);
+      let response = await fetch(targetUrl);
+      if (!response.ok && fallbackUrl) {
+        console.warn(`Drive Proxy primary fetch failed for ${targetUrl}, trying fallback ${fallbackUrl}...`);
+        response = await fetch(fallbackUrl);
+      }
+
       if (!response.ok) {
-        return res.status(response.status).send(`Failed to fetch media: ${response.statusText}`);
+        return res.status(response.status).send(`Failed to fetch media from Google Drive: ${response.statusText}`);
       }
 
       const contentType = response.headers.get('content-type') || 'application/octet-stream';

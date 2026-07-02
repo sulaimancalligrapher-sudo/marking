@@ -55,6 +55,7 @@ import {
   getSheetsConfig,
   isLiveMode,
   saveLessonCorrection,
+  testSheetsConnection,
   StudentLesson,
   PredefinedText,
   WatermarkSettings
@@ -590,25 +591,11 @@ function saveBase64ToFile(folder, base64Data, filename) {
     setConnectionStatus('testing');
     setConnectionError('');
     try {
-      saveSheetsConfig(webAppUrl, spreadsheetId);
-      // Try fetching to verify connection
-      const response = await fetch('/api/sheets-proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: webAppUrl.trim(),
-          method: 'POST',
-          data: { action: 'getTableData' }
-        })
-      });
-      const result = await response.json();
-      if (result.success) {
-        setConnectionStatus('success');
-        await loadAllData();
-        setTimeout(() => setConnectionStatus('idle'), 3000);
-      } else {
-        throw new Error(result.error || 'السكربت لم يرجع استجابة ناجحة');
-      }
+      // Use the smart testing helper which runs on local dev AND supports production static environments (like Vercel)
+      await testSheetsConnection(webAppUrl, spreadsheetId);
+      setConnectionStatus('success');
+      await loadAllData();
+      setTimeout(() => setConnectionStatus('idle'), 3000);
     } catch (err: any) {
       console.error('Connection test failed:', err);
       setConnectionStatus('error');
@@ -641,13 +628,30 @@ function saveBase64ToFile(folder, base64Data, filename) {
 
     if (lesson.mediaType === 'image') {
       setCurrentView('image-editor');
-      // Load Canvas Image
+      // Load Canvas Image with CORS protection and automatic error recovery fallback
       const img = new window.Image();
+      img.crossOrigin = 'anonymous'; // Avoid "Tainted Canvas" security exception on save
       img.onload = () => {
         setCanvasImage(img);
         setZoomScale(1.0);
         setCanvasOffset({ x: 0, y: 0 });
         setTimeout(() => redrawBoard(), 100);
+      };
+      img.onerror = () => {
+        console.warn('CORS loading failed for image. Retrying without CORS restriction...');
+        // Fallback: If CORS load fails, retry without anonymous to ensure the image displays!
+        const retryImg = new window.Image();
+        retryImg.onload = () => {
+          setCanvasImage(retryImg);
+          setZoomScale(1.0);
+          setCanvasOffset({ x: 0, y: 0 });
+          setTimeout(() => redrawBoard(), 100);
+        };
+        retryImg.onerror = (err) => {
+          console.error('All image loading attempts failed:', err);
+          alert('عذراً، تعذر تحميل الصورة على السبورة. يرجى التأكد من أن الرابط مباشر وملف الصورة مشارك للجميع (Anyone with the link can view) على Google Drive.');
+        };
+        retryImg.src = lesson.mediaUrl;
       };
       img.src = lesson.mediaUrl;
     } else {
