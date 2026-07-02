@@ -621,6 +621,10 @@ function saveBase64ToFile(folder, base64Data, filename) {
     setAdditionalImg(lesson.additionalImage || null);
     setActionsHistory([]);
     setRedoHistory([]);
+    setIsDrawing(false);
+    setStartPoint(null);
+    setTempPoints([]);
+    setDragStart(null);
     setImgRotation(0);
     setBrightness(100);
     setContrast(100);
@@ -705,9 +709,14 @@ function saveBase64ToFile(folder, base64Data, filename) {
   // Redraw Canvas including all student drawings, calligraphy paths, vector seals, and text comments
   const redrawBoard = () => {
     const canvas = canvasRef.current;
-    if (!canvas || !canvasImage) return;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    if (!canvasImage) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
 
     // Reset dimensions based on image size to avoid distortions
     if (canvas.width !== canvasImage.width || canvas.height !== canvasImage.height) {

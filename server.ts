@@ -54,6 +54,7 @@ async function startServer() {
   app.get('/api/drive-proxy', async (req, res) => {
     const fileId = req.query.id as string;
     const fileUrl = req.query.url as string;
+    const type = (req.query.type as string) || 'image';
     
     if (!fileId && !fileUrl) {
       return res.status(400).send('Missing url or id parameter');
@@ -62,18 +63,26 @@ async function startServer() {
     try {
       let targetUrl = '';
       let fallbackUrl = '';
-      if (fileId) {
-        targetUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
-        fallbackUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
-      } else {
-        // Extract ID from full URL if possible
+      
+      let finalFileId = fileId;
+      if (!finalFileId && fileUrl) {
         const fileIdMatch = fileUrl.match(/(?:id=|\/d\/|folders\/)([a-zA-Z0-9-_]{25,})[/\?]?/);
         if (fileIdMatch && fileIdMatch[1]) {
-          targetUrl = `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
-          fallbackUrl = `https://docs.google.com/uc?export=download&id=${fileIdMatch[1]}`;
-        } else {
-          targetUrl = fileUrl;
+          finalFileId = fileIdMatch[1];
         }
+      }
+
+      if (finalFileId) {
+        if (type === 'audio' || type === 'video') {
+          // Audio and video files must stream directly from Google's uc endpoint, lh3 is for images only
+          targetUrl = `https://docs.google.com/uc?export=download&id=${finalFileId}`;
+        } else {
+          // Images load faster and support CORS on lh3
+          targetUrl = `https://lh3.googleusercontent.com/d/${finalFileId}`;
+          fallbackUrl = `https://docs.google.com/uc?export=download&id=${finalFileId}`;
+        }
+      } else {
+        targetUrl = fileUrl;
       }
 
       let response = await fetch(targetUrl);

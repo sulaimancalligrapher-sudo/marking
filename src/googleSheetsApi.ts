@@ -289,14 +289,9 @@ export const getProxyUrl = (urlOrId: string, type: 'image' | 'audio' | 'video' |
 
   if (isLocalOrDev) {
     if (fileId) {
-      if (finalType === 'image') {
-        return `/api/drive-proxy?id=${fileId}`;
-      } else {
-        // Direct download stream links for audio and video elements play instantly and bypass proxy overhead
-        return `https://docs.google.com/uc?export=download&id=${fileId}`;
-      }
+      return `/api/drive-proxy?id=${fileId}&type=${finalType}`;
     }
-    return finalType === 'image' ? `/api/drive-proxy?url=${encodeURIComponent(trimmed)}` : trimmed;
+    return `/api/drive-proxy?url=${encodeURIComponent(trimmed)}&type=${finalType}`;
   }
 
   // For static production deployments (like Vercel or GitHub Pages) where there is no Express backend:
