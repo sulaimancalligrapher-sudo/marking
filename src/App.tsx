@@ -615,6 +615,7 @@ function saveBase64ToFile(folder, base64Data, filename) {
   // Launch Active Lesson Correction View
   const handleStartCorrection = (lesson: StudentLesson) => {
     setSelectedLesson(lesson);
+    setCanvasImage(null); // Clear previous student's image from board immediately to prevent stale visual caching!
     setNotes(lesson.notes || '');
     setGrade(lesson.imageGrade || lesson.audioGrade || '');
     setAdditionalImg(lesson.additionalImage || null);
@@ -2079,6 +2080,15 @@ function saveBase64ToFile(folder, base64Data, filename) {
               {/* Actual Drawing Board Canvas */}
               <div className="flex-1 min-h-[400px] bg-slate-900 border border-slate-200 rounded-2xl relative overflow-hidden flex items-center justify-center shadow-lg group">
                 
+                {/* Visual loading spinner overlay when downloading canvasImage */}
+                {!canvasImage && (
+                  <div className="absolute inset-0 bg-slate-950/80 z-20 flex flex-col items-center justify-center text-white">
+                    <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-3" />
+                    <p className="text-sm font-bold">جاري تحميل ورقة الطالب...</p>
+                    <p className="text-xs text-slate-400 mt-1">الرجاء الانتظار حتى تكتمل التهيئة الآمنة للسبورة</p>
+                  </div>
+                )}
+
                 {/* Floating zoom buttons */}
                 <div className="absolute top-4 left-4 z-10 bg-slate-800/85 backdrop-blur border border-slate-700/80 rounded-xl p-1.5 flex gap-1.5 shadow-md">
                   <button
