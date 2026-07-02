@@ -628,32 +628,66 @@ function saveBase64ToFile(folder, base64Data, filename) {
 
     if (lesson.mediaType === 'image') {
       setCurrentView('image-editor');
-      // Load Canvas Image with CORS protection and automatic error recovery fallback
-      const img = new window.Image();
-      img.crossOrigin = 'anonymous'; // Avoid "Tainted Canvas" security exception on save
-      img.onload = () => {
-        setCanvasImage(img);
-        setZoomScale(1.0);
-        setCanvasOffset({ x: 0, y: 0 });
-        setTimeout(() => redrawBoard(), 100);
-      };
-      img.onerror = () => {
-        console.warn('CORS loading failed for image. Retrying without CORS restriction...');
-        // Fallback: If CORS load fails, retry without anonymous to ensure the image displays!
-        const retryImg = new window.Image();
-        retryImg.onload = () => {
-          setCanvasImage(retryImg);
+      
+      // Extract Google Drive ID if present anywhere in the mediaUrl
+      const fileIdMatch = lesson.mediaUrl.match(/(?:id=|\/d\/|folders\/|thumbnail\?id=)([a-zA-Z0-9-_]{25,50})/);
+      const fileId = fileIdMatch ? fileIdMatch[1] : '';
+      
+      const fallbackUrls: string[] = [lesson.mediaUrl];
+      if (fileId) {
+        // 1. Direct high-speed thumbnail endpoint (excellent built-in CORS)
+        fallbackUrls.push(`https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`);
+        // 2. lh3 direct usercontent endpoint (also supports CORS)
+        fallbackUrls.push(`https://lh3.googleusercontent.com/d/${fileId}`);
+        // 3. Direct export download link
+        fallbackUrls.push(`https://docs.google.com/uc?export=download&id=${fileId}`);
+      }
+
+      let currentAttempt = 0;
+
+      const tryLoadImage = () => {
+        const img = new window.Image();
+        // Use anonymous CORS for all initial fallback items so drawing remains saveable.
+        // If we are on the very last fallback, we skip anonymous CORS so that the image is still displayed.
+        if (currentAttempt < fallbackUrls.length - 1) {
+          img.crossOrigin = 'anonymous';
+        }
+        
+        img.onload = () => {
+          console.log(`Successfully loaded board image on attempt ${currentAttempt + 1}: ${fallbackUrls[currentAttempt]}`);
+          setCanvasImage(img);
           setZoomScale(1.0);
           setCanvasOffset({ x: 0, y: 0 });
           setTimeout(() => redrawBoard(), 100);
         };
-        retryImg.onerror = (err) => {
-          console.error('All image loading attempts failed:', err);
-          alert('عذراً، تعذر تحميل الصورة على السبورة. يرجى التأكد من أن الرابط مباشر وملف الصورة مشارك للجميع (Anyone with the link can view) على Google Drive.');
+
+        img.onerror = () => {
+          console.warn(`Attempt ${currentAttempt + 1} failed to load image: ${fallbackUrls[currentAttempt]}`);
+          currentAttempt++;
+          if (currentAttempt < fallbackUrls.length) {
+            tryLoadImage();
+          } else {
+            // Absolute final retry: Load original URL without any CORS limitations to guarantee display
+            const finalImg = new window.Image();
+            finalImg.onload = () => {
+              console.log('Successfully loaded image without CORS constraint on final attempt');
+              setCanvasImage(finalImg);
+              setZoomScale(1.0);
+              setCanvasOffset({ x: 0, y: 0 });
+              setTimeout(() => redrawBoard(), 100);
+            };
+            finalImg.onerror = (err) => {
+              console.error('All image loading attempts failed:', err);
+              alert('عذراً، تعذر تحميل الصورة على السبورة. يرجى التأكد من أن الرابط مباشر وملف الصورة مشارك للجميع (Anyone with the link can view) على Google Drive.');
+            };
+            finalImg.src = fileId ? `https://drive.google.com/uc?export=view&id=${fileId}` : lesson.mediaUrl;
+          }
         };
-        retryImg.src = lesson.mediaUrl;
+
+        img.src = fallbackUrls[currentAttempt];
       };
-      img.src = lesson.mediaUrl;
+
+      tryLoadImage();
     } else {
       setCurrentView('audio-reviewer');
       setIsPlayingAudio(false);

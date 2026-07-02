@@ -246,7 +246,7 @@ export const isLiveMode = (): boolean => {
 };
 
 // Helper to wrap Google Drive URLs or pure IDs inside a CORS/Tainted Canvas proxy
-export const getProxyUrl = (urlOrId: string): string => {
+export const getProxyUrl = (urlOrId: string, type: 'image' | 'audio' | 'video' | 'auto' = 'auto'): string => {
   if (!urlOrId) return '';
   const trimmed = urlOrId.trim();
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
@@ -269,8 +269,17 @@ export const getProxyUrl = (urlOrId: string): string => {
     return trimmed;
   }
 
-  // Google's direct static usercontent endpoint which has built-in CORS support and bypasses virus/cookie barriers!
-  const directDriveUrl = fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : trimmed;
+  // Determine media type if 'auto'
+  let finalType = type;
+  if (finalType === 'auto') {
+    if (trimmed.toLowerCase().match(/\.(mp3|wav|ogg|m4a)$/) || trimmed.includes('audio')) {
+      finalType = 'audio';
+    } else if (trimmed.toLowerCase().match(/\.(mp4|webm|ogg|mov)$/) || trimmed.includes('video')) {
+      finalType = 'video';
+    } else {
+      finalType = 'image';
+    }
+  }
 
   // Check if we are running in development or AI Studio preview container (where backend proxy is active)
   const isLocalOrDev = window.location.hostname === 'localhost' || 
@@ -286,8 +295,17 @@ export const getProxyUrl = (urlOrId: string): string => {
   }
 
   // For static production deployments (like Vercel or GitHub Pages) where there is no Express backend:
-  // We use Google's own public global image proxy to securely bypass CORS issues on the board canvas
-  return `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(directDriveUrl)}`;
+  if (fileId) {
+    if (finalType === 'image') {
+      // Direct Google Drive image thumbnail endpoint: supports CORS natively and bypasses virus checks!
+      return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
+    } else {
+      // Direct file streams work perfectly for audio/video elements
+      return `https://docs.google.com/uc?export=download&id=${fileId}`;
+    }
+  }
+
+  return trimmed;
 };
 
 // Unified fetch helper that handles local Express proxy AND direct client-side Vercel/production fallback
@@ -389,15 +407,15 @@ export const fetchStudentLessons = async (): Promise<StudentLesson[]> => {
         lessonNumber: item.lessonNumber || '',
         submissionCount: item.imageSubmissionCount || item.audioSubmissionCount || 1,
         mediaType: item.imageFileId ? 'image' : 'audio',
-        mediaUrl: getProxyUrl(item.imageFileId || item.audioFileId || ''),
+        mediaUrl: getProxyUrl(item.imageFileId || item.audioFileId || '', item.imageFileId ? 'image' : 'audio'),
         isSaved: item.isSaved || false,
         notes: item.notes || '',
         imageGrade: item.imageGrade || '',
         audioGrade: item.audioGrade || '',
-        modifiedImage: getProxyUrl(item.modifiedImage || ''),
-        additionalImage: getProxyUrl(item.additionalImage || ''),
-        video: getProxyUrl(item.video || ''),
-        audio: getProxyUrl(item.audio || ''),
+        modifiedImage: getProxyUrl(item.modifiedImage || '', 'image'),
+        additionalImage: getProxyUrl(item.additionalImage || '', 'image'),
+        video: getProxyUrl(item.video || '', 'video'),
+        audio: getProxyUrl(item.audio || '', 'audio'),
         saveDate: item.saveDate || '',
         extraData: {
           'T': item.additionalT || '',
