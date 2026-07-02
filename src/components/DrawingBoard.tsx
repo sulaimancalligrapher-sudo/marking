@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Undo2, Redo2, RotateCw, RefreshCw, ZoomIn, ZoomOut, Move, Edit3, Type, Smile } from 'lucide-react';
 import { DrawingPath, PlacedSticker, PlacedText, HistoryAction, WatermarkSettings } from '../types';
 import { extractFileId } from '../lib/googleApi';
@@ -13,7 +13,7 @@ interface DrawingBoardProps {
   onStatusChange: (status: string) => void;
 }
 
-export default function DrawingBoard({
+const DrawingBoard = forwardRef<any, DrawingBoardProps>(function DrawingBoard({
   imageUrl,
   stickers,
   predefinedTexts,
@@ -21,7 +21,7 @@ export default function DrawingBoard({
   token,
   onSave,
   onStatusChange,
-}: DrawingBoardProps) {
+}, ref) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -720,6 +720,10 @@ export default function DrawingBoard({
     onSave(outputBase64);
   };
 
+  useImperativeHandle(ref, () => ({
+    triggerSave
+  }));
+
   return (
     <div className="flex flex-col h-full bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-xl" dir="rtl">
       {/* Top Controls Toolbar */}
@@ -1036,16 +1040,8 @@ export default function DrawingBoard({
           <span>اسحب اللوحة بالزر الأوسط للماوس أو مع الضغط على Shift للتنقل</span>
         </div>
       </div>
-
-      {/* Action Button */}
-      <div className="p-4 bg-slate-850 border-t border-slate-800 flex justify-end">
-        <button
-          onClick={triggerSave}
-          className="px-6 py-2.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition"
-        >
-          حفظ وتطبيق التعديلات على الصورة
-        </button>
-      </div>
     </div>
   );
-}
+});
+
+export default DrawingBoard;

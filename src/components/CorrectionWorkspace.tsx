@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, BookOpen, Star, FileText, Upload, Image as ImageIcon, Video, Volume2, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Play, Copy } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, User, BookOpen, Star, FileText, Upload, Image as ImageIcon, Video, Volume2, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Play, Copy, Save } from 'lucide-react';
 import { StudentLesson, WatermarkSettings, PredefinedText } from '../types';
 import DrawingBoard from './DrawingBoard';
 import AudioPlayer from './AudioPlayer';
@@ -42,6 +42,12 @@ export default function CorrectionWorkspace({
   const [showMetadata, setShowMetadata] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+
+  // Layout optimization states
+  const [showStudentPanel, setShowStudentPanel] = useState<boolean>(false);
+  const [activeBottomPanel, setActiveBottomPanel] = useState<'none' | 'grades' | 'files'>('none');
+
+  const drawingBoardRef = useRef<any>(null);
 
   const handleCopyEmail = (email: string) => {
     navigator.clipboard.writeText(email);
@@ -191,6 +197,20 @@ export default function CorrectionWorkspace({
           >
             <ArrowLeft size={18} />
           </button>
+
+          {/* Student Info Toggle Button */}
+          <button
+            onClick={() => setShowStudentPanel(!showStudentPanel)}
+            className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+              showStudentPanel
+                ? 'bg-emerald-600/10 border-emerald-500/40 text-emerald-400'
+                : 'bg-slate-800 border-slate-700/60 text-slate-300 hover:bg-slate-750 hover:text-white'
+            }`}
+            title="معلومات الطالب والواجب"
+          >
+            <User size={18} />
+          </button>
+
           <div>
             <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
               <span>تصحيح واجب الطالب:</span>
@@ -213,15 +233,11 @@ export default function CorrectionWorkspace({
         </div>
       </div>
 
-      {/* Main Grid: Student Bento Info & Submissions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Right Panel: Student Info Card & Grades Input Form */}
-        <div className="flex flex-col gap-6 lg:col-span-1">
-          
-          {/* Student Profile Bento Box */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col gap-4">
-            <div className="flex items-center gap-3 border-b border-slate-800/80 pb-3">
+      {/* 1. Student Info Panel (When showStudentPanel is true, placed ABOVE the board tools) */}
+      {showStudentPanel && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-600/10 text-emerald-400 flex items-center justify-center">
                 <User size={18} />
               </div>
@@ -230,57 +246,264 @@ export default function CorrectionWorkspace({
                 <p className="text-xs text-slate-500 font-mono">رقم الطالب: {lesson.studentId}</p>
               </div>
             </div>
+            <button
+              onClick={() => setShowStudentPanel(false)}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-755 text-slate-300 hover:text-white transition text-xs font-bold"
+            >
+              إغلاق
+            </button>
+          </div>
 
-            <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-slate-400">
-              <div className="flex flex-col gap-1">
-                <span>اسم الواجب</span>
-                <span className="text-slate-200 text-sm font-bold flex items-center gap-1">
-                  <BookOpen size={14} className="text-slate-500" />
-                  الدرس {lesson.lessonNumber}
-                </span>
+          <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-slate-400">
+            <div className="flex flex-col gap-1">
+              <span>اسم الواجب</span>
+              <span className="text-slate-200 text-sm font-bold flex items-center gap-1">
+                <BookOpen size={14} className="text-slate-500" />
+                الدرس {lesson.lessonNumber}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span>عدد الإرسالات</span>
+              <span className="text-slate-200 text-sm font-bold">
+                {mediaType === 'image' ? lesson.imageSubmissionCount : lesson.audioSubmissionCount} مرات
+              </span>
+            </div>
+          </div>
+
+          {/* Custom spreadsheet metadata headers (T to Y) */}
+          {additionalHeaders.length > 0 && (
+            <div className="border-t border-slate-800/80 pt-3">
+              <button
+                onClick={() => setShowMetadata(!showMetadata)}
+                className="w-full flex items-center justify-between text-xs text-slate-400 font-bold hover:text-slate-300 transition"
+              >
+                <span>تفاصيل الطالب الإضافية</span>
+                {showMetadata ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+
+              {showMetadata && (
+                <div className="flex flex-col gap-2 mt-3 bg-slate-950/40 p-3 rounded-xl border border-slate-800 text-xs">
+                  {[
+                    { h: additionalHeaders[0], v: lesson.additionalT },
+                    { h: additionalHeaders[1], v: lesson.additionalU },
+                    { h: additionalHeaders[2], v: lesson.additionalV },
+                    { h: additionalHeaders[3], v: lesson.additionalW },
+                    { h: additionalHeaders[4], v: lesson.additionalX },
+                    { h: additionalHeaders[5], v: lesson.additionalY },
+                  ].map((item, i) => item.h ? (
+                    <div key={i} className="flex justify-between items-center py-1 border-b border-slate-850 last:border-0">
+                      <span className="text-slate-500">{item.h}</span>
+                      <span className="text-slate-300 font-bold">{item.v || '-'}</span>
+                    </div>
+                  ) : null)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Status logs bar */}
+      {statusMessage && (
+        <div className="flex flex-col gap-4">
+          <div className={`p-4 rounded-2xl flex items-center gap-3 border text-sm font-semibold animate-pulse ${
+            statusType === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+              : statusType === 'error'
+              ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+              : 'bg-slate-800/80 border-slate-700/60 text-slate-300'
+          }`}>
+            <AlertCircle size={18} className="shrink-0" />
+            <span>{statusMessage}</span>
+          </div>
+
+          {/* Advanced Google Auth / 403 Permission Troubleshooting Card */}
+          {statusType === 'error' && (statusMessage.includes('403') || statusMessage.toLowerCase().includes('permission') || statusMessage.toLowerCase().includes('parent')) && (
+            <div className="bg-slate-900 border-2 border-amber-500/30 rounded-2xl p-6 flex flex-col gap-4 text-right shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 shrink-0 mt-0.5">
+                  <AlertCircle size={20} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-100">تحليل وتوجيه لحل مشكلة الصلاحيات (خطأ 403)</h4>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    بما أنك قمت بتسجيل الدخول بالحساب <span className="text-emerald-400 font-mono font-semibold">{googleUserEmail}</span>، بينما ملف الشيت والمجلد يقعان في <strong>حسابك الآخر</strong>، فإن النظام يحتاج إلى منح هذا الحساب الصلاحيات الكافية كـ <strong>محرر (Editor)</strong> للتعديل والرفع.
+                  </p>
+                </div>
               </div>
-              <div className="flex flex-col gap-1">
-                <span>عدد الإرسالات</span>
-                <span className="text-slate-200 text-sm font-bold">
-                  {mediaType === 'image' ? lesson.imageSubmissionCount : lesson.audioSubmissionCount} مرات
-                </span>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                {/* Box 1: Sheet Write Permission 403 */}
+                <div className="bg-slate-950/60 border border-slate-850 rounded-xl p-4 flex flex-col gap-2">
+                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                    <FileText size={14} className="shrink-0" />
+                    <span>1. حل مشكلة تحديث درجات الطالب:</span>
+                  </span>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    إذا ظهر خطأ <code>PERMISSION_DENIED</code> عند حفظ الدرجات، فهذا يعني أن ملف الشيت (Google Sheet) لم يتم مشاركته مع الحساب الحالي بصلاحية التعديل.
+                  </p>
+                  <div className="text-[11px] text-slate-500 space-y-1 mt-1">
+                    <p><strong>خطوات الحل:</strong></p>
+                    <p>1. افتح ملف الشيت من حسابك الآخر (المالك للملف).</p>
+                    <p>2. اضغط على زر <strong>مشاركة (Share)</strong> في الأعلى.</p>
+                    <p>3. أضف البريد أدناه وتأكد من تعيين الصلاحية إلى <strong>محرر (Editor)</strong> وليس عارض.</p>
+                  </div>
+                </div>
+
+                {/* Box 2: Drive Folder Permission 403 */}
+                <div className="bg-slate-950/60 border border-slate-850 rounded-xl p-4 flex flex-col gap-2">
+                  <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+                    <Upload size={14} className="shrink-0" />
+                    <span>2. حل مشكلة رفع صور التصحيح:</span>
+                  </span>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    إذا ظهر خطأ <code>Insufficient permissions for parent</code>، فهذا يعني أن مجلد الطلاب بقوقل درايف لم يُشارك مع الحساب الحالي.
+                  </p>
+                  <div className="text-[11px] text-slate-500 space-y-1 mt-1">
+                    <p><strong>خطوات الحل:</strong></p>
+                    <p>1. افتح قوقل درايف (Google Drive) بحسابك الآخر.</p>
+                    <p>2. اذهب إلى المجلد المخصص لحفظ واجبات الطلاب (Folder ID).</p>
+                    <p>3. اضغط عليه بالزر الأيمن للفأرة واشتركه مع الإيميل أدناه بصفة <strong>محرر (Editor)</strong>.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Copy Email Helper */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950 border border-slate-850 px-4 py-3 rounded-xl mt-1 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400">البريد الإلكتروني المطلوب منحه الصلاحيات:</span>
+                  <span className="font-mono text-emerald-400 select-all font-semibold">{googleUserEmail}</span>
+                </div>
+                <button
+                  onClick={() => handleCopyEmail(googleUserEmail)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer shrink-0"
+                >
+                  {copied ? <CheckCircle2 size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  <span>{copied ? 'تم نسخ الإيميل' : 'نسخ الإيميل المطلوب'}</span>
+                </button>
               </div>
             </div>
+          )}
+        </div>
+      )}
 
-            {/* Custom spreadsheet metadata headers (T to Y) */}
-            {additionalHeaders.length > 0 && (
-              <div className="border-t border-slate-800/80 pt-3">
-                <button
-                  onClick={() => setShowMetadata(!showMetadata)}
-                  className="w-full flex items-center justify-between text-xs text-slate-400 font-bold hover:text-slate-300 transition"
+      {/* 2. Interactive media stage (The Board / Submissions remain EXACTLY as is) */}
+      <div className="w-full min-h-[500px]">
+        {originalMediaLoading ? (
+          <div className="h-[500px] rounded-2xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center gap-3">
+            <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-slate-400 text-sm font-semibold">جاري تحميل ملف الطالب من قوقل درايف...</p>
+          </div>
+        ) : mediaType === 'image' ? (
+          <div className="h-[650px]">
+            <DrawingBoard
+              ref={drawingBoardRef}
+              imageUrl={originalMediaUrl}
+              stickers={stickers}
+              predefinedTexts={predefinedTexts}
+              watermarkSettings={watermarkSettings}
+              token={token}
+              onSave={handleSaveCorrection}
+              onStatusChange={(msg) => {
+                setStatusMessage(msg);
+                setStatusType('info');
+              }}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl">
+              <h3 className="font-bold text-slate-200 mb-2">استماع لواجب الطالب الصوتي:</h3>
+              {originalMediaUrl ? (
+                <AudioPlayer audioUrl={originalMediaUrl} />
+              ) : (
+                <div className="p-8 text-center text-slate-500 bg-slate-950 rounded-xl border border-slate-800">
+                  ملف الصوت غير جاهز أو غير موجود.
+                </div>
+              )}
+            </div>
+
+            {/* Display previous corrected image if available */}
+            {lesson.isSaved && lesson.modifiedImageUrl && (
+              <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl">
+                <h3 className="font-bold text-slate-200 mb-2">الصورة المعدلة المصححة سابقاً:</h3>
+                <a
+                  href={lesson.modifiedImageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block rounded-xl overflow-hidden border border-slate-800 max-w-[200px]"
                 >
-                  <span>تفاصيل الطالب الإضافية</span>
-                  {showMetadata ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-
-                {showMetadata && (
-                  <div className="flex flex-col gap-2 mt-3 bg-slate-950/40 p-3 rounded-xl border border-slate-800 text-xs">
-                    {[
-                      { h: additionalHeaders[0], v: lesson.additionalT },
-                      { h: additionalHeaders[1], v: lesson.additionalU },
-                      { h: additionalHeaders[2], v: lesson.additionalV },
-                      { h: additionalHeaders[3], v: lesson.additionalW },
-                      { h: additionalHeaders[4], v: lesson.additionalX },
-                      { h: additionalHeaders[5], v: lesson.additionalY },
-                    ].map((item, i) => item.h ? (
-                      <div key={i} className="flex justify-between items-center py-1 border-b border-slate-850 last:border-0">
-                        <span className="text-slate-500">{item.h}</span>
-                        <span className="text-slate-300 font-bold">{item.v || '-'}</span>
-                      </div>
-                    ) : null)}
-                  </div>
-                )}
+                  <img src={lesson.modifiedImageUrl} alt="Correction" className="w-full object-cover max-h-48" />
+                </a>
               </div>
             )}
           </div>
+        )}
+      </div>
 
-          {/* Grades and Notes Input Form */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col gap-5">
+      {/* 3. Action Buttons Row (Unified Control Row below the Board) */}
+      <div className="flex items-center justify-center p-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm">
+        <div className="flex items-center gap-3">
+          
+          {/* Button B: Toggle Evaluation & Notes (Square with Icon only) */}
+          <button
+            onClick={() => {
+              setActiveBottomPanel(activeBottomPanel === 'grades' ? 'none' : 'grades');
+            }}
+            className={`w-12 h-12 flex items-center justify-center rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+              activeBottomPanel === 'grades'
+                ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 font-bold'
+                : 'bg-slate-800 border-slate-700/60 text-slate-300 hover:bg-slate-750 hover:text-white'
+            }`}
+            title="تقييم الواجب والدرجات"
+          >
+            <Star size={20} />
+          </button>
+
+          {/* Button C: Toggle File Attachments (Square with Icon only) */}
+          <button
+            onClick={() => {
+              setActiveBottomPanel(activeBottomPanel === 'files' ? 'none' : 'files');
+            }}
+            className={`w-12 h-12 flex items-center justify-center rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+              activeBottomPanel === 'files'
+                ? 'bg-sky-500/10 border-sky-500/40 text-sky-400 font-bold'
+                : 'bg-slate-800 border-slate-700/60 text-slate-300 hover:bg-slate-750 hover:text-white'
+            }`}
+            title="إرفاق ملفات توضيحية"
+          >
+            <Upload size={20} />
+          </button>
+
+          {/* Button D: Save/Commit changes (Square with Save Icon only) */}
+          <button
+            onClick={() => {
+              if (mediaType === 'image' && drawingBoardRef.current) {
+                drawingBoardRef.current.triggerSave();
+              } else {
+                handleSaveCorrection();
+              }
+            }}
+            disabled={loading}
+            className="w-12 h-12 flex items-center justify-center rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 transition shadow-md cursor-pointer"
+            title="حفظ التعديلات"
+          >
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <Save size={20} />
+            )}
+          </button>
+
+        </div>
+      </div>
+
+      {/* 4. Bottom Collapsable Panels (Only one open at a time under the board) */}
+      <div className="w-full flex flex-col gap-4">
+        
+        {/* Panel A: Grades and Notes */}
+        {activeBottomPanel === 'grades' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 duration-200">
             <h3 className="font-bold text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-3">
               <Star size={16} className="text-amber-500" />
               <span>تقييم الواجب والدرجات</span>
@@ -327,9 +550,11 @@ export default function CorrectionWorkspace({
               </div>
             </div>
           </div>
+        )}
 
-          {/* Native Uploads & Media Recorders Block */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col gap-4">
+        {/* Panel B: Native Uploads / File Attachments */}
+        {activeBottomPanel === 'files' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
             <h3 className="font-bold text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-3">
               <Upload size={16} className="text-emerald-500" />
               <span>إرفاق ملفات تصحيح إضافية</span>
@@ -438,163 +663,7 @@ export default function CorrectionWorkspace({
 
             </div>
           </div>
-
-          {/* Final Submit Trigger Card */}
-          {mediaType === 'audio' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
-              <button
-                onClick={() => handleSaveCorrection()}
-                disabled={loading}
-                className="w-full py-3.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 transition active:scale-[0.98] shadow-lg shadow-emerald-600/10 cursor-pointer"
-              >
-                {loading ? 'جاري الحفظ والتثبيت...' : 'حفظ وإنهاء تصحيح الدرس الصوتي'}
-              </button>
-            </div>
-          )}
-
-        </div>
-
-        {/* Left Panel: Primary corrections workspace (Board or Audio Player) */}
-        <div className="flex flex-col gap-6 lg:col-span-2">
-          
-          {/* Status logs bar */}
-          {statusMessage && (
-            <div className="flex flex-col gap-4">
-              <div className={`p-4 rounded-2xl flex items-center gap-3 border text-sm font-semibold animate-pulse ${
-                statusType === 'success'
-                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                  : statusType === 'error'
-                  ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                  : 'bg-slate-800/80 border-slate-700/60 text-slate-300'
-              }`}>
-                <AlertCircle size={18} className="shrink-0" />
-                <span>{statusMessage}</span>
-              </div>
-
-              {/* Advanced Google Auth / 403 Permission Troubleshooting Card */}
-              {statusType === 'error' && (statusMessage.includes('403') || statusMessage.toLowerCase().includes('permission') || statusMessage.toLowerCase().includes('parent')) && (
-                <div className="bg-slate-900 border-2 border-amber-500/30 rounded-2xl p-6 flex flex-col gap-4 text-right shadow-lg">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 shrink-0 mt-0.5">
-                      <AlertCircle size={20} />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-100">تحليل وتوجيه لحل مشكلة الصلاحيات (خطأ 403)</h4>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        بما أنك قمت بتسجيل الدخول بالحساب <span className="text-emerald-400 font-mono font-semibold">{googleUserEmail}</span>، بينما ملف الشيت والمجلد يقعان في <strong>حسابك الآخر</strong>، فإن النظام يحتاج إلى منح هذا الحساب الصلاحيات الكافية كـ <strong>محرر (Editor)</strong> للتعديل والرفع.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                    {/* Box 1: Sheet Write Permission 403 */}
-                    <div className="bg-slate-950/60 border border-slate-850 rounded-xl p-4 flex flex-col gap-2">
-                      <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                        <FileText size={14} className="shrink-0" />
-                        <span>1. حل مشكلة تحديث درجات الطالب:</span>
-                      </span>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        إذا ظهر خطأ <code>PERMISSION_DENIED</code> عند حفظ الدرجات، فهذا يعني أن ملف الشيت (Google Sheet) لم يتم مشاركته مع الحساب الحالي بصلاحية التعديل.
-                      </p>
-                      <div className="text-[11px] text-slate-500 space-y-1 mt-1">
-                        <p><strong>خطوات الحل:</strong></p>
-                        <p>1. افتح ملف الشيت من حسابك الآخر (المالك للملف).</p>
-                        <p>2. اضغط على زر <strong>مشاركة (Share)</strong> في الأعلى.</p>
-                        <p>3. أضف البريد أدناه وتأكد من تعيين الصلاحية إلى <strong>محرر (Editor)</strong> وليس عارض.</p>
-                      </div>
-                    </div>
-
-                    {/* Box 2: Drive Folder Permission 403 */}
-                    <div className="bg-slate-950/60 border border-slate-850 rounded-xl p-4 flex flex-col gap-2">
-                      <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-                        <Upload size={14} className="shrink-0" />
-                        <span>2. حل مشكلة رفع صور التصحيح:</span>
-                      </span>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        إذا ظهر خطأ <code>Insufficient permissions for parent</code>، فهذا يعني أن مجلد الطلاب بقوقل درايف لم يُشارك مع الحساب الحالي.
-                      </p>
-                      <div className="text-[11px] text-slate-500 space-y-1 mt-1">
-                        <p><strong>خطوات الحل:</strong></p>
-                        <p>1. افتح قوقل درايف (Google Drive) بحسابك الآخر.</p>
-                        <p>2. اذهب إلى المجلد المخصص لحفظ واجبات الطلاب (Folder ID).</p>
-                        <p>3. اضغط عليه بالزر الأيمن للفأرة واشتركه مع الإيميل أدناه بصفة <strong>محرر (Editor)</strong>.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Copy Email Helper */}
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950 border border-slate-850 px-4 py-3 rounded-xl mt-1 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400">البريد الإلكتروني المطلوب منحه الصلاحيات:</span>
-                      <span className="font-mono text-emerald-400 select-all font-semibold">{googleUserEmail}</span>
-                    </div>
-                    <button
-                      onClick={() => handleCopyEmail(googleUserEmail)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer shrink-0"
-                    >
-                      {copied ? <CheckCircle2 size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                      <span>{copied ? 'تم نسخ الإيميل' : 'نسخ الإيميل المطلوب'}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Interactive media stage */}
-          <div className="flex-1 min-h-[500px]">
-            {originalMediaLoading ? (
-              <div className="h-[500px] rounded-2xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center gap-3">
-                <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-slate-400 text-sm font-semibold">جاري تحميل ملف الطالب من قوقل درايف...</p>
-              </div>
-            ) : mediaType === 'image' ? (
-              <div className="h-[650px]">
-                <DrawingBoard
-                  imageUrl={originalMediaUrl}
-                  stickers={stickers}
-                  predefinedTexts={predefinedTexts}
-                  watermarkSettings={watermarkSettings}
-                  token={token}
-                  onSave={handleSaveCorrection}
-                  onStatusChange={(msg) => {
-                    setStatusMessage(msg);
-                    setStatusType('info');
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl">
-                  <h3 className="font-bold text-slate-200 mb-2">استماع لواجب الطالب الصوتي:</h3>
-                  {originalMediaUrl ? (
-                    <AudioPlayer audioUrl={originalMediaUrl} />
-                  ) : (
-                    <div className="p-8 text-center text-slate-500 bg-slate-950 rounded-xl border border-slate-800">
-                      ملف الصوت غير جاهز أو غير موجود.
-                    </div>
-                  )}
-                </div>
-
-                {/* Display previous corrected image if available */}
-                {lesson.isSaved && lesson.modifiedImageUrl && (
-                  <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl">
-                    <h3 className="font-bold text-slate-200 mb-2">الصورة المعدلة المصححة سابقاً:</h3>
-                    <a
-                      href={lesson.modifiedImageUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-block rounded-xl overflow-hidden border border-slate-800 max-w-[200px]"
-                    >
-                      <img src={lesson.modifiedImageUrl} alt="Correction" className="w-full object-cover max-h-48" />
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-        </div>
+        )}
 
       </div>
 

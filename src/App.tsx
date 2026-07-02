@@ -118,8 +118,19 @@ export default function App() {
         setGoogleToken(result.accessToken);
       }
     } catch (err: any) {
-      console.error(err);
-      setErrorMessage('فشل تسجيل الدخول باستخدام حساب Google.');
+      console.error('Firebase Auth Error:', err);
+      let errMsg = 'فشل تسجيل الدخول باستخدام حساب Google.';
+      
+      if (err.code === 'auth/unauthorized-domain') {
+        errMsg = `خطأ (Unauthorized Domain): نطاق هذا الموقع غير مصرّح به في مشروع Firebase الخاص بك. لحل هذه المشكلة، يرجى نسخ هذا النطاق (${window.location.hostname}) وإضافته إلى قائمة "النطاقات المصرح بها" (Authorized Domains) في وحدة تحكم Firebase (Authentication -> Settings -> Authorized Domains).`;
+      } else if (err.code === 'auth/popup-blocked') {
+        errMsg = 'خطأ (Popup Blocked): تم حظر النافذة المنبثقة بواسطة المتصفح. يرجى تفعيل السماح بالنوافذ المنبثقة لهذا الموقع في متصفحك والمحاولة مجدداً.';
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        errMsg = 'تم إغلاق نافذة تسجيل الدخول بواسطة المستخدم قبل إتمام عملية الدخول.';
+      } else if (err.message) {
+        errMsg = `فشل تسجيل الدخول: ${err.message}`;
+      }
+      setErrorMessage(errMsg);
     }
   };
 
