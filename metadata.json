@@ -1,0 +1,6 @@
+{
+  "name": "نظام تصحيح دروس الطلاب",
+  "description": "نظام ذكي ومتطور لتصحيح دروس الطلاب بالصوت والصورة، يحتوي على سبورة تفاعلية بأدوات احترافية للرسم والكتابة والملصقات، مع تسجيل الملاحظات الصوتية والربط المباشر بـ Google Sheets.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

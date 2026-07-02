@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Tajawal", "Cairo", system-ui, -apple-system, sans-serif;
+  --font-serif: "Amiri", serif;
+  --color-brand-green: #0d5c3a;
+  --color-brand-gold: #c5a85c;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+/* Custom styles for professional drawings */
+.canvas-container {
+  touch-action: none;
+}
+
