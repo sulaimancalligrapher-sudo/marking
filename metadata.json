@@ -1,6 +1,6 @@
 {
-  "name": "Lesson Correction System Analyzer",
-  "description": "An analysis of the Google Apps Script, Google Sheets, and HTML system for student lesson correction.",
-  "requestFramePermissions": [],
+  "name": "منصة تصحيح الدروس الذكية",
+  "description": "منصة احترافية لتصحيح دروس الطلاب (صوت وصورة) بشكل تفاعلي متصلة بـ Google Sheets مباشرة مع أدوات رسم وخط عربي متقدمة ومسجل صوتي احترافي.",
+  "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

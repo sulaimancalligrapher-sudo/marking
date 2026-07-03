@@ -1,278 +1,280 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { 
-  Play, Pause, Volume2, VolumeX, RotateCcw, SkipBack, SkipForward,
-  FastForward, Info
+  Play, Pause, SkipBack, SkipForward, Volume2, 
+  VolumeX, Gauge, RotateCcw
 } from 'lucide-react';
 
 interface AudioPlayerProps {
-  audioSrc: string | null;
+  audioUrl: string | null;
   studentName: string;
-  lessonNumber: string | number;
+  isLoading: boolean;
 }
 
-export default function AudioPlayer({ audioSrc, studentName, lessonNumber }: AudioPlayerProps) {
+export default function AudioPlayer({ audioUrl, studentName, isLoading }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.8);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1.0);
-  const [animationFrameId, setAnimationFrameId] = useState<number | null>(null);
 
-  // Synchronize audio states
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const onDurationChange = () => setDuration(audio.duration || 0);
-    const onEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
-
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('durationchange', onDurationChange);
-    audio.addEventListener('ended', onEnded);
-
-    // Reset playback rate and state when source changes
-    audio.playbackRate = playbackRate;
+    // Reset play state when url changes
     setIsPlaying(false);
     setCurrentTime(0);
+    setDuration(0);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [audioUrl]);
 
-    return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('durationchange', onDurationChange);
-      audio.removeEventListener('ended', onEnded);
-    };
-  }, [audioSrc]);
-
-  // Audio frequency wave mock visualization
+  // Handle keyboard shortcut for play/pause (Space bar)
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let localFrameId: number;
-    const barCount = 45;
-    const barHeights = Array.from({ length: barCount }, () => Math.random() * 20 + 5);
-
-    const drawWave = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const width = canvas.width;
-      const height = canvas.height;
-      const barWidth = width / barCount - 2;
-
-      for (let i = 0; i < barCount; i++) {
-        // Generate moving waveform heights if audio is playing, else static minor wave
-        let displayHeight = barHeights[i];
-        if (isPlaying) {
-          displayHeight = Math.sin(Date.now() * 0.005 + i * 0.2) * (height / 2.5) + (height / 2) + Math.random() * 10;
-        } else {
-          displayHeight = Math.sin(i * 0.15) * 8 + 15;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && audioUrl) {
+        // Prevent default spacebar scrolling
+        if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+          togglePlay();
         }
-
-        const x = i * (barWidth + 2);
-        const y = height / 2 - displayHeight / 2;
-
-        // Custom metallic emerald & teal gradient
-        const gradient = ctx.createLinearGradient(0, y, 0, y + displayHeight);
-        gradient.addColorStop(0, '#10B981'); // Emerald
-        gradient.addColorStop(1, '#06B6D4'); // Cyan
-
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.roundRect?.(x, y, barWidth, displayHeight, 3);
-        ctx.fill();
       }
-
-      localFrameId = requestAnimationFrame(drawWave);
     };
-
-    drawWave();
-
-    return () => {
-      cancelAnimationFrame(localFrameId);
-    };
-  }, [isPlaying]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [audioUrl, isPlaying]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !audioUrl) return;
 
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
     } else {
-      audio.play().catch(e => console.error("Playback error:", e));
-      setIsPlaying(true);
+      audio.play().then(() => {
+        setIsPlaying(true);
+      }).catch(err => console.log("Playback error: ", err));
     }
   };
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const nextVolume = parseFloat(e.target.value);
-    setVolume(nextVolume);
+  const handleTimeUpdate = () => {
     if (audioRef.current) {
-      audioRef.current.volume = nextVolume;
-      audioRef.current.muted = nextVolume === 0;
-      setIsMuted(nextVolume === 0);
+      setCurrentTime(audioRef.current.currentTime);
     }
   };
 
-  const toggleMute = () => {
-    const nextMute = !isMuted;
-    setIsMuted(nextMute);
+  const handleLoadedMetadata = () => {
     if (audioRef.current) {
-      audioRef.current.muted = nextMute;
+      setDuration(audioRef.current.duration);
     }
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const seekTarget = parseFloat(e.target.value);
-    setCurrentTime(seekTarget);
+  const handleAudioEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const skipTime = (amount: number) => {
     if (audioRef.current) {
-      audioRef.current.currentTime = seekTarget;
+      let newTime = audioRef.current.currentTime + amount;
+      if (newTime < 0) newTime = 0;
+      if (newTime > duration) newTime = duration;
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
     }
   };
 
-  const handleSpeedChange = (rate: number) => {
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const targetTime = Number(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = targetTime;
+      setCurrentTime(targetTime);
+    }
+  };
+
+  const changeSpeed = (rate: number) => {
     setPlaybackRate(rate);
     if (audioRef.current) {
       audioRef.current.playbackRate = rate;
     }
   };
 
-  const skipSeconds = (secs: number) => {
+  const toggleMute = () => {
     if (audioRef.current) {
-      let target = audioRef.current.currentTime + secs;
-      if (target < 0) target = 0;
-      if (target > duration) target = duration;
-      audioRef.current.currentTime = target;
-      setCurrentTime(target);
+      const nextMuted = !isMuted;
+      audioRef.current.muted = nextMuted;
+      setIsMuted(nextMuted);
     }
   };
 
-  // Convert seconds to MM:SS format
-  const formatTime = (secs: number) => {
-    if (isNaN(secs)) return '0:00';
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value);
+    setVolume(val);
+    if (audioRef.current) {
+      audioRef.current.volume = val;
+      audioRef.current.muted = val === 0;
+      setIsMuted(val === 0);
+    }
+  };
+
+  // Helper to format seconds into MM:SS
+  const formatTime = (timeInSeconds: number) => {
+    if (isNaN(timeInSeconds)) return '00:00';
+    const minutes = Math.floor(timeInSeconds / 60);
+    const seconds = Math.floor(timeInSeconds % 60);
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl text-white">
-      {/* Invisible HTML5 Audio Tag */}
-      {audioSrc && <audio ref={audioRef} src={audioSrc} />}
+    <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg border border-slate-800 flex flex-col gap-4 font-sans">
+      <audio
+        ref={audioRef}
+        src={audioUrl || undefined}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={handleAudioEnded}
+      />
 
-      {/* Student/Lesson Title Badge */}
-      <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 mb-6">
-        <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-lg">
-          <Info className="w-5 h-5" />
+      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex flex-col">
+          <span className="text-xs text-slate-400 font-sans">تسميع صوت الطالب</span>
+          <span className="text-md font-bold text-emerald-400 font-sans">{studentName || 'غير معروف'}</span>
         </div>
-        <div className="text-right">
-          <h3 className="font-semibold text-sm text-slate-200">الاستماع لتسجيل الطالب: {studentName}</h3>
-          <p className="text-xs text-slate-400">الدرس رقم: {lessonNumber}</p>
-        </div>
-      </div>
-
-      {/* Waveform Visualization Canvas */}
-      <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6">
-        <canvas 
-          ref={canvasRef} 
-          width={500} 
-          height={80} 
-          className="w-full h-20 bg-slate-950 rounded"
-        />
-      </div>
-
-      {/* Seek and Time Display */}
-      <div className="mb-6">
-        <input
-          type="range"
-          min={0}
-          max={duration || 100}
-          value={currentTime}
-          onChange={handleSeek}
-          className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-        />
-        <div className="flex justify-between text-xs text-slate-400 font-mono mt-2">
-          <span>{formatTime(duration)}</span>
-          <span>{formatTime(currentTime)}</span>
+        <div className="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1.5 rounded-xl text-xs text-slate-300">
+          <Gauge className="w-4 h-4 text-emerald-400" />
+          <span>سرعة الاستماع: {playbackRate}x</span>
         </div>
       </div>
 
-      {/* Main Playback Controls bar */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-        
-        {/* Skip & Play Buttons */}
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => skipSeconds(-10)}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 transition"
-            title="رجوع 10 ثواني"
-          >
-            <SkipBack className="w-5 h-5" />
-          </button>
-          
-          <button
-            onClick={togglePlay}
-            className="p-4 bg-emerald-500 hover:bg-emerald-600 rounded-full text-white shadow-lg hover:shadow-emerald-500/20 transition-all scale-110 active:scale-95"
-            title={isPlaying ? "إيقاف مؤقت" : "تشغيل"}
-          >
-            {isPlaying ? <Pause className="w-6 h-6 fill-white" /> : <Play className="w-6 h-6 fill-white" />}
-          </button>
-
-          <button
-            onClick={() => skipSeconds(10)}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 transition"
-            title="تقديم 10 ثواني"
-          >
-            <SkipForward className="w-5 h-5" />
-          </button>
+      {isLoading && (
+        <div className="flex items-center justify-center py-4 gap-2 text-slate-400 text-sm">
+          <div className="w-4 h-4 border-2 border-slate-600 border-t-emerald-400 rounded-full animate-spin"></div>
+          <span>جاري تحميل الملف الصوتي...</span>
         </div>
+      )}
 
-        {/* Speed Adjustment Controls */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
-          {[0.75, 1.0, 1.25, 1.5, 2.0].map(speed => (
-            <button
-              key={speed}
-              onClick={() => handleSpeedChange(speed)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold font-mono transition ${
-                playbackRate === speed 
-                  ? 'bg-emerald-500 text-white' 
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              x{speed}
-            </button>
-          ))}
+      {!audioUrl && !isLoading && (
+        <p className="text-center py-4 text-xs text-slate-500 italic">لا يوجد ملف صوتي مرفق في هذا الدرس</p>
+      )}
+
+      {audioUrl && !isLoading && (
+        <div className="flex flex-col gap-3">
+          {/* Waves simulation visual decor */}
+          <div className="flex items-end justify-center gap-[3px] h-12 px-4 py-2 bg-slate-950/60 rounded-xl overflow-hidden">
+            {Array.from({ length: 42 }).map((_, i) => {
+              // Create reactive heights simulation
+              const isCenterActive = isPlaying ? Math.abs(currentTime % 3 - (i % 3)) < 1 : false;
+              const hVal = isCenterActive 
+                ? Math.max(15, Math.floor(Math.sin((i + currentTime) * 0.8) * 24) + 20)
+                : Math.max(4, Math.floor(Math.sin(i * 0.5) * 8) + 10);
+              return (
+                <div 
+                  key={i} 
+                  className={`w-[4px] rounded-full transition-all duration-300 ${isPlaying ? 'bg-emerald-400' : 'bg-slate-700'}`}
+                  style={{ height: `${hVal}px` }}
+                />
+              );
+            })}
+          </div>
+
+          {/* Time slider */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-mono text-slate-400">{formatTime(currentTime)}</span>
+            <input
+              type="range"
+              min="0"
+              max={duration || 100}
+              value={currentTime}
+              onChange={handleSeekChange}
+              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+            />
+            <span className="text-xs font-mono text-slate-400">{formatTime(duration)}</span>
+          </div>
+
+          {/* Primary Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mt-1">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => skipTime(-5)}
+                className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all"
+                title="إرجاع ٥ ثوانٍ"
+              >
+                <SkipBack className="w-4 h-4 text-slate-300" />
+              </button>
+
+              <button
+                type="button"
+                onClick={togglePlay}
+                className="p-4 bg-emerald-500 hover:bg-emerald-600 active:scale-95 rounded-2xl shadow-md transition-all flex items-center justify-center"
+                title="تشغيل / إيقاف مؤقت (المسافة)"
+              >
+                {isPlaying ? (
+                  <Pause className="w-5 h-5 text-slate-950" />
+                ) : (
+                  <Play className="w-5 h-5 text-slate-950 fill-slate-950" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => skipTime(5)}
+                className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all"
+                title="تقديم ٥ ثوانٍ"
+              >
+                <SkipForward className="w-4 h-4 text-slate-300" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (audioRef.current) audioRef.current.currentTime = 0;
+                  setCurrentTime(0);
+                }}
+                className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-400"
+                title="إعادة من البداية"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Speeds selector */}
+            <div className="flex items-center gap-1.5 bg-slate-800/60 p-1 rounded-xl">
+              {[0.75, 1.0, 1.25, 1.5, 1.75].map(rate => (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => changeSpeed(rate)}
+                  className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all ${playbackRate === rate ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                >
+                  {rate}x
+                </button>
+              ))}
+            </div>
+
+            {/* Volume */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={toggleMute}
+                className="p-1.5 text-slate-400 hover:text-white transition-all"
+              >
+                {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4" />}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={isMuted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="w-16 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-slate-300"
+              />
+            </div>
+          </div>
         </div>
-
-        {/* Volume & Mute Controls */}
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <button
-            onClick={toggleMute}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-          >
-            {isMuted ? <VolumeX className="w-5 h-5 text-red-400" /> : <Volume2 className="w-5 h-5 text-emerald-400" />}
-          </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={isMuted ? 0 : volume}
-            onChange={handleVolumeChange}
-            className="w-24 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-          />
-        </div>
-
-      </div>
+      )}
     </div>
   );
 }

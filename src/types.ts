@@ -1,7 +1,7 @@
-export interface StudentRecord {
+export interface StudentSubmission {
   studentId: string;
   studentName: string;
-  lessonNumber: number | string;
+  lessonNumber: string;
   imageSubmissionCount: number;
   imageFileId: string | null;
   imageMimeType: string | null;
@@ -27,23 +27,36 @@ export interface WatermarkSettings {
   logoUrl: string;
   opacity: number;
   sizeFactor: number;
-  logoPosition: string;
+  logoPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
   textPrefix: string;
   fontSize: number;
-  textPosition: string;
+  textPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
 }
 
-export interface UserAccount {
-  username: string;
-  status: string;
+export interface ProfileInfo {
+  logoUrl: string;
+  title: string;
+  subtitle: string;
 }
 
-export interface SavedCorrectionData {
+export interface ContactInfo {
+  facebook: string;
+  instagram: string;
+  youtube: string;
+  line: string;
+}
+
+export interface SavedCorrection {
   notes: string;
   imageGrade: string;
-  modifiedImage: string;
   audioGrade: string;
-  additionalImage: string;
-  video: string;
-  audio: string;
+  modifiedImage?: string; // base64
+  additionalImage?: string; // base64
+  video?: string; // base64
+  audio?: string; // base64
+}
+
+export interface AppUser {
+  username: string;
+  status: string;
 }

@@ -1,295 +1,284 @@
-import React, { useState } from "react";
-import { Search, LogOut, CheckCircle, Clock, BookOpen, AlertCircle, RefreshCw, FileImage, Volume2, UserCheck, Eye, Sparkles } from "lucide-react";
-import { StudentRecord } from "../types";
+import React, { useState, useMemo } from 'react';
+import { 
+  Search, CheckCircle, Clock, Users, Award, HelpCircle, 
+  ChevronLeft, Image as ImageIcon, Volume2, ShieldAlert
+} from 'lucide-react';
+import { StudentSubmission, ProfileInfo } from '../types';
 
 interface DashboardProps {
-  records: StudentRecord[];
-  onSelectRecord: (record: StudentRecord) => void;
-  onLogout: () => void;
-  currentUser: string;
-  loading: boolean;
-  onRefresh: () => void;
-  schoolName: string;
+  submissions: StudentSubmission[];
+  profile: ProfileInfo;
+  onSelectRow: (row: StudentSubmission, isEditingSaved: boolean) => void;
+  isLoading: boolean;
 }
 
-export default function Dashboard({ 
-  records, 
-  onSelectRecord, 
-  onLogout, 
-  currentUser, 
-  loading, 
-  onRefresh,
-  schoolName
+export default function Dashboard({
+  submissions,
+  profile,
+  onSelectRow,
+  isLoading
 }: DashboardProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState<"all" | "pending" | "corrected">("pending");
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showAll, setShowAll] = useState(false); // false = uncorrected only by default
 
-  // Filter records
-  const filteredRecords = records.filter((rec) => {
-    // 1. Search filter
-    const matchesSearch = 
-      rec.studentId?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rec.studentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rec.lessonNumber?.toString().toLowerCase().includes(searchTerm.toLowerCase());
+  // Calculate high-level statistics
+  const stats = useMemo(() => {
+    const total = submissions.length;
+    const corrected = submissions.filter(s => s.isSaved).length;
+    const pending = total - corrected;
+    const imageCount = submissions.filter(s => s.imageFileId).length;
+    const audioCount = submissions.filter(s => s.audioFileId).length;
+    
+    return {
+      total,
+      corrected,
+      pending,
+      imageCount,
+      audioCount,
+      completionRate: total > 0 ? Math.round((corrected / total) * 100) : 0
+    };
+  }, [submissions]);
 
-    if (!matchesSearch) return false;
+  // Filter and search submissions list
+  const filteredSubmissions = useMemo(() => {
+    return submissions.filter(s => {
+      // 1. Filter by Saved status
+      if (!showAll && s.isSaved) return false;
 
-    // 2. Tab filter
-    if (activeTab === "pending") return !rec.isSaved;
-    if (activeTab === "corrected") return rec.isSaved;
-    return true; // all
-  });
+      // 2. Filter by search query
+      const query = searchTerm.toLowerCase();
+      if (!query) return true;
 
-  // KPI Calculations
-  const totalCount = records.length;
-  const correctedCount = records.filter((rec) => rec.isSaved).length;
-  const pendingCount = totalCount - correctedCount;
-  const imageCount = records.filter((rec) => rec.imageFileId).length;
-  const audioCount = records.filter((rec) => rec.audioFileId).length;
+      return (
+        s.studentId.toString().toLowerCase().includes(query) ||
+        s.studentName.toLowerCase().includes(query) ||
+        s.lessonNumber.toString().toLowerCase().includes(query)
+      );
+    });
+  }, [submissions, showAll, searchTerm]);
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-800" dir="rtl">
-      {/* Top Premium Navbar */}
-      <header className="bg-zinc-900 text-white border-b border-zinc-800 sticky top-0 z-40 shadow-md">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-zinc-950 font-bold text-xl shadow-lg border border-amber-400">
-              ✒️
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-amber-400">{schoolName || "أكاديمية الخط العربي"}</h1>
-              <p className="text-xs text-zinc-400">بوابة المتابعة والتصحيح الاحترافي للدروس</p>
-            </div>
-          </div>
+    <div className="flex flex-col gap-6 text-right font-sans" dir="rtl" id="dashboard-section">
+      
+      {/* 1. Header Hero Panel */}
+      <div className="bg-gradient-to-l from-slate-900 via-slate-800 to-slate-950 text-white p-6 md:p-8 rounded-3xl shadow-md border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
-          <div className="flex items-center justify-between sm:justify-end gap-4">
-            <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 px-4 py-2 rounded-xl text-sm">
-              <UserCheck className="w-4 h-4 text-amber-400" />
-              <span className="font-medium text-zinc-200">أهلاً بك، {currentUser}</span>
-            </div>
-            <button
-              onClick={onLogout}
-              className="px-3 py-2 bg-zinc-800 hover:bg-red-950 hover:text-red-300 border border-zinc-700 hover:border-red-900 rounded-xl text-zinc-400 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 text-sm font-semibold"
-              title="تسجيل الخروج"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">خروج</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        
-        {/* Bento Grid Stats Card Panel */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">إجمالي المهام</p>
-              <h3 className="text-3xl font-bold text-zinc-800 font-mono">{totalCount}</h3>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-zinc-100 text-zinc-600 flex items-center justify-center">
-              <BookOpen className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">بانتظار تصحيحك</p>
-              <h3 className="text-3xl font-bold text-amber-600 font-mono">{pendingCount}</h3>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Clock className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">المهام المصححة</p>
-              <h3 className="text-3xl font-bold text-emerald-600 font-mono">{correctedCount}</h3>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <CheckCircle className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">توزيع الدرس</p>
-              <div className="flex gap-4 mt-1.5 text-zinc-700">
-                <span className="text-sm font-semibold flex items-center gap-1 font-mono">
-                  <FileImage className="w-4 h-4 text-emerald-600" /> {imageCount} صورة
-                </span>
-                <span className="text-sm font-semibold flex items-center gap-1 font-mono">
-                  <Volume2 className="w-4 h-4 text-blue-600" /> {audioCount} صوت
-                </span>
-              </div>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-zinc-50 text-zinc-500 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-amber-500" />
-            </div>
-          </div>
-        </section>
-
-        {/* Filters and Search Workspace Container */}
-        <section className="bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
-          
-          {/* Header Action Row */}
-          <div className="p-6 border-b border-zinc-100 bg-zinc-50/50 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            
-            {/* Search */}
-            <div className="relative flex-1 max-w-md">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="ابحث برقم الطالب، اسم الطالب، أو رقم الدرس..."
-                className="w-full pl-4 pr-11 py-2.5 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-sm transition-all"
-              />
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 text-zinc-400" />
-            </div>
-
-            {/* Filter Tabs */}
-            <div className="flex items-center gap-1.5 p-1 bg-zinc-100 rounded-xl self-start md:self-auto">
-              <button
-                onClick={() => setActiveTab("pending")}
-                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === "pending"
-                    ? "bg-amber-500 text-zinc-950 shadow-sm"
-                    : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-200/50"
-                }`}
-              >
-                بانتظار المراجعة ({pendingCount})
-              </button>
-              <button
-                onClick={() => setActiveTab("corrected")}
-                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === "corrected"
-                    ? "bg-zinc-900 text-amber-400 shadow-sm"
-                    : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-200/50"
-                }`}
-              >
-                المهام المنجزة ({correctedCount})
-              </button>
-              <button
-                onClick={() => setActiveTab("all")}
-                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === "all"
-                    ? "bg-zinc-200 text-zinc-800 shadow-sm font-semibold"
-                    : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-200/50"
-                }`}
-              >
-                عرض الكل ({totalCount})
-              </button>
-            </div>
-
-            {/* Refresh/Sync Data */}
-            <button
-              onClick={onRefresh}
-              disabled={loading}
-              className="px-4 py-2 bg-white hover:bg-zinc-100 border border-zinc-200 rounded-xl text-xs font-bold text-zinc-700 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2 self-start md:self-auto shadow-sm"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-              <span>تحديث البيانات من شيت</span>
-            </button>
-          </div>
-
-          {/* List/Table content */}
-          {loading ? (
-            <div className="p-16 text-center space-y-4">
-              <RefreshCw className="w-10 h-10 animate-spin text-amber-500 mx-auto" />
-              <p className="text-zinc-500 text-sm">جاري جلب ومزامنة آخر الدروس المرسلة من قوقل شيت...</p>
-            </div>
-          ) : filteredRecords.length === 0 ? (
-            <div className="p-16 text-center space-y-3">
-              <AlertCircle className="w-12 h-12 text-zinc-300 mx-auto" />
-              <h4 className="text-lg font-bold text-zinc-700">لا توجد مهام مطابقة للبحث</h4>
-              <p className="text-zinc-400 text-xs">حاول تغيير خيارات التصفية أو التأكد من إدخال كلمات بحث صحيحة.</p>
-            </div>
+        <div className="flex items-center gap-4 relative z-10">
+          {profile.logoUrl ? (
+            <img 
+              src={profile.logoUrl} 
+              alt="Logo" 
+              className="w-16 h-16 md:w-20 md:h-20 rounded-2xl object-cover bg-white/10 p-1 shadow-inner" 
+            />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse">
-                <thead>
-                  <tr className="border-b border-zinc-100 text-zinc-400 text-xs font-bold uppercase bg-zinc-50/50">
-                    <th className="py-4 px-6 font-semibold">رقم الطالب</th>
-                    <th className="py-4 px-6 font-semibold">اسم الطالب</th>
-                    <th className="py-4 px-6 font-semibold">رقم الدرس</th>
-                    <th className="py-4 px-6 font-semibold text-center">نوع الملف</th>
-                    <th className="py-4 px-6 font-semibold text-center">مرات الإرسال</th>
-                    <th className="py-4 px-6 font-semibold text-center">حالة الحفظ</th>
-                    <th className="py-4 px-6 font-semibold text-center">الإجراء</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 text-sm">
-                  {filteredRecords.map((rec) => {
-                    const isImage = !!rec.imageFileId;
-                    const isAudio = !!rec.audioFileId;
-                    
-                    return (
-                      <tr key={rec.row} className="hover:bg-zinc-50/50 transition-colors">
-                        <td className="py-4 px-6 font-semibold text-zinc-900">{rec.studentId}</td>
-                        <td className="py-4 px-6">
-                          <div className="font-semibold text-zinc-800">{rec.studentName}</div>
-                          <div className="text-zinc-400 text-xxs mt-0.5">صف الشيت: {rec.row}</div>
-                        </td>
-                        <td className="py-4 px-6 font-mono text-zinc-600">درس {rec.lessonNumber}</td>
-                        <td className="py-4 px-6 text-center">
-                          {isImage && (
-                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full text-xs font-semibold">
-                              <FileImage className="w-3.5 h-3.5" />
-                              صورة
-                            </span>
-                          )}
-                          {isAudio && (
-                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 px-2.5 py-1 rounded-full text-xs font-semibold">
-                              <Volume2 className="w-3.5 h-3.5" />
-                              صوت وقراءة
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-center font-bold text-zinc-500 font-mono">
-                          {isImage ? rec.imageSubmissionCount : rec.audioSubmissionCount}
-                        </td>
-                        <td className="py-4 px-6 text-center">
-                          {rec.isSaved ? (
-                            <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-600 px-2.5 py-1 rounded-full text-xs font-bold">
-                              تم تصحيحه وحفظه
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-600 px-2.5 py-1 rounded-full text-xs font-bold">
-                              بانتظار تصحيحك
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-center">
-                          <button
-                            onClick={() => onSelectRecord(rec)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 mx-auto ${
-                              rec.isSaved
-                                ? "bg-zinc-800 text-amber-400 hover:bg-zinc-700 shadow-sm"
-                                : "bg-amber-500 text-zinc-950 hover:bg-amber-400 shadow shadow-amber-500/20"
-                            }`}
-                          >
-                            <Eye className="w-4 h-4" />
-                            <span>{rec.isSaved ? "مراجعة وتعديل" : "بدء التصحيح"}</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-white text-3xl font-bold">
+              {profile.title.charAt(0) || 'ص'}
             </div>
           )}
-
-          {/* Footer of the panel */}
-          <div className="p-4 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500 px-6">
-            <span>إجمالي الصفوف المطابقة للفلاتر الحالية: {filteredRecords.length} صف طالب</span>
-            <span>الأكاديمية متصلة بقاعدة البيانات بشكل حي ومباشر</span>
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl md:text-2xl font-black text-white font-sans">{profile.title}</h1>
+            <p className="text-xs md:text-sm text-slate-300 font-sans font-medium">{profile.subtitle}</p>
           </div>
-        </section>
-      </main>
+        </div>
+
+        <div className="flex items-center gap-3 relative z-10 shrink-0 bg-white/5 backdrop-blur-xs px-4 py-3 rounded-2xl border border-white/10">
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] text-slate-300 font-sans">معدل الإنجاز الكلي</span>
+            <span className="text-xl font-bold text-emerald-400 font-mono">{stats.completionRate}%</span>
+          </div>
+          <div className="w-px h-8 bg-white/20 mx-1"></div>
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] text-slate-300 font-sans">تم تصحيحه</span>
+            <span className="text-xl font-bold text-white font-mono">{stats.corrected}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. KPIs Summary Blocks */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: Uncorrected / Pending */}
+        <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-100 flex items-center justify-between gap-4 transition-all hover:shadow-md">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-slate-400 font-semibold font-sans">الدروس قيد الانتظار</span>
+            <span className="text-2xl font-extrabold text-slate-800 font-mono">{stats.pending}</span>
+          </div>
+          <div className="p-3 bg-amber-50 rounded-xl">
+            <Clock className="w-6 h-6 text-amber-500" />
+          </div>
+        </div>
+
+        {/* KPI 2: Corrected */}
+        <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-100 flex items-center justify-between gap-4 transition-all hover:shadow-md">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-slate-400 font-semibold font-sans">تم تصحيحها</span>
+            <span className="text-2xl font-extrabold text-slate-800 font-mono">{stats.corrected}</span>
+          </div>
+          <div className="p-3 bg-emerald-50 rounded-xl">
+            <CheckCircle className="w-6 h-6 text-emerald-500" />
+          </div>
+        </div>
+
+        {/* KPI 3: Total Submissions */}
+        <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-100 flex items-center justify-between gap-4 transition-all hover:shadow-md">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-slate-400 font-semibold font-sans">إجمالي الدروس المسجلة</span>
+            <span className="text-2xl font-extrabold text-slate-800 font-mono">{stats.total}</span>
+          </div>
+          <div className="p-3 bg-indigo-50 rounded-xl">
+            <Users className="w-6 h-6 text-indigo-500" />
+          </div>
+        </div>
+
+        {/* KPI 4: Types Distribution */}
+        <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-100 flex items-center justify-between gap-4 transition-all hover:shadow-md">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-slate-400 font-semibold font-sans">التوزيع (صورة / صوت)</span>
+            <span className="text-md font-bold text-slate-700 font-mono">
+              📷 {stats.imageCount} / 🔊 {stats.audioCount}
+            </span>
+          </div>
+          <div className="p-3 bg-slate-50 rounded-xl">
+            <Award className="w-6 h-6 text-slate-600" />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Search and Action Filters Row */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+        
+        {/* Search input */}
+        <div className="relative w-full md:max-w-md">
+          <input 
+            type="text" 
+            placeholder="ابحث برقم الطالب، الاسم، أو رقم الدرس..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full text-xs pr-10 pl-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-sans"
+          />
+          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+        </div>
+
+        {/* Filter selection toggles */}
+        <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+          <button
+            type="button"
+            onClick={() => setShowAll(false)}
+            className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${!showAll ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+          >
+            الدروس الغير مصححة فقط
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${showAll ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+          >
+            إظهار جميع السجلات
+          </button>
+        </div>
+      </div>
+
+      {/* 4. Submissions Datatable */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
+        {isLoading ? (
+          <div className="p-12 flex flex-col items-center justify-center gap-3">
+            <div className="w-10 h-10 border-4 border-slate-100 border-t-emerald-600 rounded-full animate-spin"></div>
+            <p className="text-sm text-slate-500 font-sans">جاري سحب وتحديث كشوفات الطلاب من Google Sheets...</p>
+          </div>
+        ) : filteredSubmissions.length === 0 ? (
+          <div className="p-16 text-center flex flex-col items-center justify-center gap-3">
+            <ShieldAlert className="w-10 h-10 text-slate-300" />
+            <p className="text-sm font-semibold text-slate-500 font-sans">لا توجد دروس مطابقة لشروط البحث والتصفية حالياً</p>
+            <p className="text-xs text-slate-400 font-sans">تأكد من اختيار "إظهار جميع السجلات" أو تعديل معايير البحث.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-right border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 text-xs font-semibold border-b border-slate-100">
+                  <th className="p-4 font-sans">رقم الطالب</th>
+                  <th className="p-4 font-sans">اسم الطالب</th>
+                  <th className="p-4 font-sans text-center">رقم الدرس</th>
+                  <th className="p-4 font-sans text-center">عدد مرات الإرسال</th>
+                  <th className="p-4 font-sans text-center">نوع مادة الدرس</th>
+                  <th className="p-4 font-sans text-center">حالة الحفظ</th>
+                  <th className="p-4 font-sans text-left">التصحيح والدرجات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                {filteredSubmissions.map((row) => (
+                  <tr 
+                    key={row.row} 
+                    className={`hover:bg-slate-50/70 transition-all ${row.isSaved ? 'bg-emerald-50/20' : ''}`}
+                  >
+                    <td className="p-4 font-mono font-bold text-slate-800">#{row.studentId}</td>
+                    <td className="p-4 font-semibold text-slate-800">{row.studentName}</td>
+                    <td className="p-4 font-mono font-bold text-center text-slate-600">{row.lessonNumber}</td>
+                    <td className="p-4 text-center">
+                      <span className="bg-slate-100 text-slate-700 font-bold font-mono px-2.5 py-0.5 rounded-full">
+                        {row.imageFileId ? row.imageSubmissionCount : row.audioSubmissionCount}
+                      </span>
+                    </td>
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {row.imageFileId && (
+                          <span className="bg-indigo-50 text-indigo-700 font-semibold px-2 py-1 rounded-lg flex items-center gap-1 text-[10px]">
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            صورة
+                          </span>
+                        )}
+                        {row.audioFileId && (
+                          <span className="bg-emerald-50 text-emerald-700 font-semibold px-2 py-1 rounded-lg flex items-center gap-1 text-[10px]">
+                            <Volume2 className="w-3.5 h-3.5" />
+                            صوت
+                          </span>
+                        )}
+                        {!row.imageFileId && !row.audioFileId && (
+                          <span className="text-slate-400 italic">بدون ملف</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4 text-center">
+                      {row.isSaved ? (
+                        <span className="text-emerald-700 bg-emerald-100 font-semibold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                          ✓ تم الحفظ
+                        </span>
+                      ) : (
+                        <span className="text-amber-700 bg-amber-50 font-semibold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                          ⏳ بانتظار التصحيح
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4 text-left">
+                      <div className="inline-flex items-center gap-1.5">
+                        {row.isSaved ? (
+                          <button
+                            type="button"
+                            onClick={() => onSelectRow(row, true)}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all"
+                          >
+                            تعديل التصحيح السابق
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onSelectRow(row, false)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black px-4 py-1.5 rounded-lg transition-all flex items-center gap-1 shadow-xs hover:shadow-xs"
+                          >
+                            ابدأ التصحيح الآن
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
