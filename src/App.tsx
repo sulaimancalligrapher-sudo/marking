@@ -414,7 +414,15 @@ export default function App() {
 
       {/* 2. Main Workspace Layout */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
-        {!webAppUrl ? (
+        {view === 'settings' ? (
+          <SettingsPanel 
+            webAppUrl={webAppUrl}
+            onSaveUrl={saveUrlSetting}
+            onTestConnection={testConnection}
+            isTesting={isLoading}
+            connectionStatus={connectionStatus}
+          />
+        ) : !webAppUrl ? (
           /* Empty Database Config State */
           <div className="bg-white border border-slate-100 rounded-3xl p-8 md:p-12 text-center shadow-xs flex flex-col items-center max-w-2xl mx-auto gap-4 mt-8">
             <div className="p-4 bg-emerald-50 rounded-2xl">
@@ -507,16 +515,6 @@ export default function App() {
                 profile={profile}
                 onSelectRow={handleSelectRowForCorrection}
                 isLoading={isLoading}
-              />
-            )}
-
-            {view === 'settings' && (
-              <SettingsPanel 
-                webAppUrl={webAppUrl}
-                onSaveUrl={saveUrlSetting}
-                onTestConnection={testConnection}
-                isTesting={isLoading}
-                connectionStatus={connectionStatus}
               />
             )}
 
