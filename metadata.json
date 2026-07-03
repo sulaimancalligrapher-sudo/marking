@@ -1,6 +1,6 @@
 {
-  "name": "بوابة تصحيح الدروس والخطوط",
-  "description": "منصة احترافية لتصحيح خطوط وتلاوات الطلاب مدمجة بالكامل مع جداول بيانات جوجل درايف",
-  "requestFramePermissions": ["camera", "microphone"],
+  "name": "Lesson Correction System Analyzer",
+  "description": "An analysis of the Google Apps Script, Google Sheets, and HTML system for student lesson correction.",
+  "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

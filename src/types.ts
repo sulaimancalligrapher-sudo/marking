@@ -1,7 +1,7 @@
-export interface StudentRow {
-  studentId: string | number;
+export interface StudentRecord {
+  studentId: string;
   studentName: string;
-  lessonNumber: string | number;
+  lessonNumber: number | string;
   imageSubmissionCount: number;
   imageFileId: string | null;
   imageMimeType: string | null;
@@ -27,23 +27,23 @@ export interface WatermarkSettings {
   logoUrl: string;
   opacity: number;
   sizeFactor: number;
-  logoPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  logoPosition: string;
   textPrefix: string;
   fontSize: number;
-  textPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  textPosition: string;
 }
 
-export interface User {
+export interface UserAccount {
   username: string;
   status: string;
 }
 
-export interface AppSettings {
-  googleAppsScriptUrl: string;
-  watermark: WatermarkSettings;
-  predefinedTexts: PredefinedText[];
-  users: User[];
-  profileName: string;
-  profileSub: string;
-  profileLogo: string;
+export interface SavedCorrectionData {
+  notes: string;
+  imageGrade: string;
+  modifiedImage: string;
+  audioGrade: string;
+  additionalImage: string;
+  video: string;
+  audio: string;
 }
