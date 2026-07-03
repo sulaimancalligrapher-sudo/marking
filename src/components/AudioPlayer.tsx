@@ -41,7 +41,7 @@ export default function AudioPlayer({ src, title = 'تسجيل الطالب ال
         }
 
         if (fileId) {
-          setCleanSrc(`https://docs.google.com/uc?export=download&id=${fileId}`);
+          setCleanSrc(`/api/drive-proxy?id=${fileId}`);
         } else {
           setCleanSrc(src);
         }

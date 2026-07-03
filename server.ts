@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
+import { Readable } from "stream";
 
 async function startServer() {
   const app = express();
@@ -9,6 +10,42 @@ async function startServer() {
   // Increase body size limits for large canvas base64 images and audio uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // API Proxy Route for Google Drive files (to play audio without CORS or Google restrictions)
+  app.get("/api/drive-proxy", async (req, res) => {
+    try {
+      const fileId = req.query.id as string;
+      if (!fileId) {
+        return res.status(400).send("Missing Google Drive file ID.");
+      }
+
+      const targetUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
+      console.log(`[Drive Proxy] Streaming file ID: ${fileId}`);
+
+      const response = await fetch(targetUrl);
+      if (!response.ok) {
+        return res.status(response.status).send("Failed to retrieve file from Google Drive.");
+      }
+
+      // Forward content type
+      const contentType = response.headers.get("content-type");
+      if (contentType) {
+        res.setHeader("Content-Type", contentType);
+      } else {
+        res.setHeader("Content-Type", "audio/mpeg");
+      }
+
+      // Stream download to the client
+      if (response.body) {
+        Readable.from(response.body as any).pipe(res);
+      } else {
+        res.end();
+      }
+    } catch (error: any) {
+      console.error("[Drive Proxy Error]:", error);
+      res.status(500).send(error.message || "Failed to proxy Google Drive file.");
+    }
+  });
 
   // API Proxy Route for Google Sheets Web App (to bypass CORS issues)
   app.get("/api/sheets", async (req, res) => {
