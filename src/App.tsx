@@ -73,20 +73,20 @@ export default function App() {
 
   // Load Settings from LocalStorage
   useEffect(() => {
+    let savedUrl = '';
     const saved = localStorage.getItem('appSettings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         setSettings(parsed);
-        if (parsed.googleAppsScriptUrl) {
-          setIsDatabaseMocked(false);
-          // Auto fetch live data from Google Sheets via backend proxy
-          fetchLiveDatabase(parsed.googleAppsScriptUrl);
-        }
+        savedUrl = parsed.googleAppsScriptUrl || '';
       } catch (e) {
         console.error('Failed parsing saved settings:', e);
       }
     }
+
+    // Attempt live fetch using stored URL or server-side environment variable fallback
+    fetchLiveDatabase(savedUrl || 'ENV_FALLBACK');
 
     const sessionUser = localStorage.getItem('loggedInUser');
     if (sessionUser) {
@@ -96,20 +96,30 @@ export default function App() {
   }, []);
 
   const fetchLiveDatabase = async (url: string) => {
-    if (!url) return;
     setIsSyncing(true);
     try {
       const res = await fetch('/api/sheets/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appsScriptUrl: url })
+        body: JSON.stringify({ appsScriptUrl: url === 'ENV_FALLBACK' ? '' : url })
       });
       const responseData = await res.json();
       if (responseData.success && responseData.data) {
         const payload = responseData.data;
+        const resolvedUrl = (responseData.appsScriptUrl && responseData.appsScriptUrl !== 'ENV_FALLBACK') 
+          ? responseData.appsScriptUrl 
+          : (url === 'ENV_FALLBACK' ? '' : url);
+
         if (Array.isArray(payload)) {
           setStudents(payload);
           setIsDatabaseMocked(false);
+          if (resolvedUrl) {
+            setSettings(prev => {
+              const nextSettings = { ...prev, googleAppsScriptUrl: resolvedUrl };
+              localStorage.setItem('appSettings', JSON.stringify(nextSettings));
+              return nextSettings;
+            });
+          }
         } else if (typeof payload === 'object') {
           // It's the upgraded Code.gs configuration bundle
           if (Array.isArray(payload.students)) {
@@ -119,7 +129,7 @@ export default function App() {
           setSettings(prev => {
             const nextSettings = {
               ...prev,
-              googleAppsScriptUrl: url,
+              googleAppsScriptUrl: resolvedUrl || prev.googleAppsScriptUrl,
               predefinedTexts: Array.isArray(payload.predefinedTexts) && payload.predefinedTexts.length > 0 
                 ? payload.predefinedTexts 
                 : prev.predefinedTexts,

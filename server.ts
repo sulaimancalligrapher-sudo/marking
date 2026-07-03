@@ -17,7 +17,7 @@ async function bootstrap() {
 
   // API Route 1: Proxy database retrieval from Google Sheets Apps Script
   app.post('/api/sheets/data', async (req, res) => {
-    const { appsScriptUrl } = req.body;
+    const appsScriptUrl = req.body.appsScriptUrl || process.env.GOOGLE_APPS_SCRIPT_URL;
     if (!appsScriptUrl) {
       return res.status(400).json({ success: false, message: 'Google Apps Script URL is required.' });
     }
@@ -49,11 +49,12 @@ async function bootstrap() {
           success: true, 
           data: [], 
           rawText: text,
+          appsScriptUrl,
           message: 'Connection checked, but response was not valid JSON.' 
         });
       }
 
-      res.json({ success: true, data: parsed });
+      res.json({ success: true, data: parsed, appsScriptUrl });
     } catch (e: any) {
       console.error('Error fetching Sheets data:', e);
       res.status(500).json({ success: false, message: e.message });
@@ -62,7 +63,8 @@ async function bootstrap() {
 
   // API Route 2: Proxy save all correction media & update sheet
   app.post('/api/sheets/save', async (req, res) => {
-    const { appsScriptUrl, ...savePayload } = req.body;
+    const { appsScriptUrl: bodyUrl, ...savePayload } = req.body;
+    const appsScriptUrl = bodyUrl || process.env.GOOGLE_APPS_SCRIPT_URL;
     if (!appsScriptUrl) {
       return res.status(400).json({ success: false, message: 'Google Apps Script URL is required.' });
     }
