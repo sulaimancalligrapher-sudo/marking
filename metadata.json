@@ -1,12 +1,6 @@
 {
-  "name": "لوحة تصحيح الدروس والخط العربي",
-  "description": "منصة احترافية لتصحيح دروس الطلاب (صورة وصوت) مع سبورة تفاعلية تدعم القلم المشطوف للخط العربي والملاحظات الصوتية والمرفقات متصلة بقوقل شيت",
-  "requestFramePermissions": [
-    "camera",
-    "microphone",
-    "geolocation"
-  ],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "name": "بوابة تصحيح الدروس والخطوط",
+  "description": "منصة احترافية لتصحيح خطوط وتلاوات الطلاب مدمجة بالكامل مع جداول بيانات جوجل درايف",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,535 +1,749 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { 
+  Users, Settings as SettingsIcon, LogOut, CheckCircle, AlertCircle, 
+  HelpCircle, ChevronLeft, Save, Plus, ArrowRight, FileAudio, FileImage, 
+  FolderOpen, Mic, Camera, Upload, Trash2, ShieldCheck, Database, Sliders,
+  CheckCircle2, Sparkles
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import {
-  LessonItem, ProfileData, ContactData, PredefinedText,
-  StickerItem, WatermarkSettings, AppConfig
-} from './types';
-import {
-  INITIAL_PROFILE, INITIAL_CONTACT, INITIAL_PREDEFINED_TEXTS,
-  INITIAL_STICKERS, INITIAL_WATERMARK, INITIAL_LESSONS
+import { StudentRow, AppSettings, User, PredefinedText } from './types';
+import { 
+  initialMockStudents, initialMockTexts, initialMockUsers, 
+  mockImages, mockAudios 
 } from './mockData';
 
-// Custom Components
-import Header from './components/Header';
-import LessonList from './components/LessonList';
-import CanvasBoard from './components/CanvasBoard';
+// Subcomponents
+import StudentTable from './components/StudentTable';
+import DrawingBoard from './components/DrawingBoard';
 import AudioPlayer from './components/AudioPlayer';
-import GradeForm from './components/GradeForm';
+import SettingsPanel from './components/SettingsPanel';
 import LoginModal from './components/LoginModal';
-import SheetsConfig from './components/SheetsConfig';
 
-import { Settings, RefreshCw, AlertCircle, FileText, CheckCircle, Database } from 'lucide-react';
+const DEFAULT_SETTINGS: AppSettings = {
+  googleAppsScriptUrl: '',
+  profileName: 'الأستاذ سليمان',
+  profileSub: 'معلم ومصحح الخط العربي والتلاوة',
+  profileLogo: 'https://img.icons8.com/color/144/calligraphy.png',
+  watermark: {
+    logoUrl: '',
+    opacity: 0.7,
+    sizeFactor: 1.2,
+    logoPosition: 'bottom-right',
+    textPrefix: 'تم تصحيح واجب الخط للأستاذ سليمان',
+    fontSize: 22,
+    textPosition: 'bottom-left'
+  },
+  predefinedTexts: initialMockTexts,
+  users: initialMockUsers
+};
 
 export default function App() {
-  // Auth state
+  const [activeTab, setActiveTab] = useState<'students' | 'settings'>('students');
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [students, setStudents] = useState<StudentRow[]>(initialMockStudents);
+  
+  // Login flow
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
 
-  // App Configurations (Google Sheets connector vs Local Simulator)
-  const [config, setConfig] = useState<AppConfig>({
-    webAppUrl: '',
-    useLiveConnection: false
-  });
-  const [configOpen, setConfigOpen] = useState(false);
+  // Correction Workspace
+  const [activeLesson, setActiveLesson] = useState<StudentRow | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [canvasImage, setCanvasImage] = useState<string | null>(null);
+  
+  // Input fields
+  const [notes, setNotes] = useState('');
+  const [imageGrade, setImageGrade] = useState('');
+  const [audioGrade, setAudioGrade] = useState('');
+  const [playOriginalMediaUrl, setPlayOriginalMediaUrl] = useState<string | null>(null);
 
-  // Active student selection
-  const [selectedLesson, setSelectedLesson] = useState<LessonItem | null>(null);
-  const [canvasBase64, setCanvasBase64] = useState<string>('');
+  // Additional attachments captures
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturedAudio, setCapturedAudio] = useState<string | null>(null);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [isCapturingWebcam, setIsCapturingWebcam] = useState(false);
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
 
-  // Main data collections
-  const [lessons, setLessons] = useState<LessonItem[]>([]);
-  const [profile, setProfile] = useState<ProfileData>(INITIAL_PROFILE);
-  const [contact, setContact] = useState<ContactData>(INITIAL_CONTACT);
-  const [predefinedTexts, setPredefinedTexts] = useState<PredefinedText[]>(INITIAL_PREDEFINED_TEXTS);
-  const [stickers, setStickers] = useState<StickerItem[]>(INITIAL_STICKERS);
-  const [watermark, setWatermark] = useState<WatermarkSettings>(INITIAL_WATERMARK);
+  // Status & Notification
+  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error' | 'loading'; msg: string } | null>(null);
+  const [isDatabaseMocked, setIsDatabaseMocked] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Status indicator
-  const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-
-  // Original Media Preview Modal
-  const [previewOriginalMediaOpen, setPreviewOriginalMediaOpen] = useState(false);
-
-  // Load configuration and data on boot
+  // Load Settings from LocalStorage
   useEffect(() => {
-    // 1. Restore auth session
-    const savedUser = localStorage.getItem('loggedInUser');
-    if (savedUser) {
-      setCurrentUser(savedUser);
-    }
-
-    // 2. Restore Google Sheet Configuration
-    const savedConfig = localStorage.getItem('calligraphy_sheets_config');
-    let activeConfig: AppConfig = { webAppUrl: '', useLiveConnection: false };
-    if (savedConfig) {
+    const saved = localStorage.getItem('appSettings');
+    if (saved) {
       try {
-        const parsed = JSON.parse(savedConfig);
-        activeConfig = parsed;
-        setConfig(parsed);
+        const parsed = JSON.parse(saved);
+        setSettings(parsed);
+        if (parsed.googleAppsScriptUrl) {
+          setIsDatabaseMocked(false);
+          // Auto fetch live data from Google Sheets via backend proxy
+          fetchLiveDatabase(parsed.googleAppsScriptUrl);
+        }
       } catch (e) {
-        console.error('Failed to parse sheets configuration', e);
+        console.error('Failed parsing saved settings:', e);
       }
     }
 
-    // 3. Load Lessons & metadata
-    loadAllData(activeConfig);
+    const sessionUser = localStorage.getItem('loggedInUser');
+    if (sessionUser) {
+      setCurrentUser(sessionUser);
+      setIsLoggedIn(true);
+    }
   }, []);
 
-  // Main fetch function that handles Live connection vs Simulator
-  const loadAllData = async (activeConfig: AppConfig) => {
-    setLoading(true);
-    setConnectionError(null);
-    setStatusMessage('جاري تحميل وتزامن البيانات من قاعدة البيانات السحابية...');
-
-    if (activeConfig.useLiveConnection && activeConfig.webAppUrl) {
-      try {
-        // Fetch lessons, predefined texts, stickers, and watermark settings in parallel
-        const [resLessons, resTexts, resStickers, resWatermark] = await Promise.all([
-          fetch(`/api/sheets?url=${encodeURIComponent(activeConfig.webAppUrl)}&action=getTableData`),
-          fetch(`/api/sheets?url=${encodeURIComponent(activeConfig.webAppUrl)}&action=getPredefinedTexts`),
-          fetch(`/api/sheets?url=${encodeURIComponent(activeConfig.webAppUrl)}&action=getStickerUrls`),
-          fetch(`/api/sheets?url=${encodeURIComponent(activeConfig.webAppUrl)}&action=getWatermarkSettings`)
-        ]);
-
-        let parseErrorOccurred = false;
-        let isHtmlResponse = false;
-
-        // Process Lessons
-        if (resLessons.ok) {
-          const text = await resLessons.text();
-          if (text.trim().startsWith('<') || text.includes('<html>') || text.includes('<!DOCTYPE')) {
-            isHtmlResponse = true;
-            parseErrorOccurred = true;
-          } else {
-            try {
-              const lessonsData = JSON.parse(text);
-              if (Array.isArray(lessonsData)) {
-                setLessons(lessonsData);
-              } else {
-                parseErrorOccurred = true;
-              }
-            } catch (e) {
-              parseErrorOccurred = true;
-            }
+  const fetchLiveDatabase = async (url: string) => {
+    if (!url) return;
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/sheets/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appsScriptUrl: url })
+      });
+      const responseData = await res.json();
+      if (responseData.success && responseData.data) {
+        const payload = responseData.data;
+        if (Array.isArray(payload)) {
+          setStudents(payload);
+          setIsDatabaseMocked(false);
+        } else if (typeof payload === 'object') {
+          // It's the upgraded Code.gs configuration bundle
+          if (Array.isArray(payload.students)) {
+            setStudents(payload.students);
           }
+          
+          setSettings(prev => {
+            const nextSettings = {
+              ...prev,
+              googleAppsScriptUrl: url,
+              predefinedTexts: Array.isArray(payload.predefinedTexts) && payload.predefinedTexts.length > 0 
+                ? payload.predefinedTexts 
+                : prev.predefinedTexts,
+              users: Array.isArray(payload.users) && payload.users.length > 0 
+                ? payload.users 
+                : prev.users,
+              watermark: payload.watermark 
+                ? { ...prev.watermark, ...payload.watermark } 
+                : prev.watermark,
+              profileName: payload.watermark?.textPrefix 
+                ? payload.watermark.textPrefix.replace('تم تصحيح واجب الخط للأستاذ ', 'الأستاذ ')
+                : prev.profileName
+            };
+            localStorage.setItem('appSettings', JSON.stringify(nextSettings));
+            return nextSettings;
+          });
+          setIsDatabaseMocked(false);
         } else {
-          parseErrorOccurred = true;
+          console.warn('Could not parse Google Sheets response format. Falling back to offline simulator.');
         }
-
-        // Process Predefined Texts
-        if (resTexts.ok && !isHtmlResponse) {
-          try {
-            const text = await resTexts.text();
-            if (!text.trim().startsWith('<') && !text.includes('<html>') && !text.includes('<!DOCTYPE')) {
-              const textsData = JSON.parse(text);
-              if (Array.isArray(textsData)) {
-                setPredefinedTexts(textsData);
-              }
-            }
-          } catch (e) {}
-        }
-
-        // Process Stickers
-        if (resStickers.ok && !isHtmlResponse) {
-          try {
-            const text = await resStickers.text();
-            if (!text.trim().startsWith('<') && !text.includes('<html>') && !text.includes('<!DOCTYPE')) {
-              const stickersData = JSON.parse(text);
-              if (Array.isArray(stickersData)) {
-                const mappedStickers = stickersData.map((fileId: string) => ({
-                  fileId: fileId,
-                  url: `https://lh3.googleusercontent.com/d/${fileId}`
-                }));
-                setStickers(mappedStickers);
-              }
-            }
-          } catch (e) {}
-        }
-
-        // Process Watermark Settings
-        if (resWatermark.ok && !isHtmlResponse) {
-          try {
-            const text = await resWatermark.text();
-            if (!text.trim().startsWith('<') && !text.includes('<html>') && !text.includes('<!DOCTYPE')) {
-              const watermarkData = JSON.parse(text);
-              if (watermarkData && !watermarkData.error) {
-                setWatermark({
-                  logoUrl: watermarkData.logoUrl ? `https://lh3.googleusercontent.com/d/${watermarkData.logoUrl}` : '',
-                  opacity: watermarkData.opacity ?? 1,
-                  sizeFactor: watermarkData.sizeFactor ?? 1,
-                  logoPosition: watermarkData.logoPosition ?? 'bottom-right',
-                  textPrefix: watermarkData.textPrefix ?? '',
-                  fontSize: watermarkData.fontSize ?? 20,
-                  textPosition: watermarkData.textPosition ?? 'bottom-left'
-                });
-              }
-            }
-          } catch (e) {}
-        }
-
-        if (parseErrorOccurred) {
-          if (isHtmlResponse) {
-            setConnectionError(
-              'رابط تطبيق الويب المضاف يرجع صفحة ويب (HTML) بدلاً من بيانات JSON. هذا يعني أنه تم استدعاء دالة doGet الأصلية التي تعرض قالب الصفحة، ولم تقم باستبدالها لتمرير الـ Actions والبيانات البرمجية المطلوبة. يرجى مراجعة الكود بالأسفل.'
-            );
-          } else {
-            setConnectionError(
-              'فشل في تحليل البيانات الواردة من قوقل شيت. يرجى التأكد من تسمية الصفحات A1 و Settings بشكل مطابق للشيت.'
-            );
-          }
-          loadFromLocalFallback();
-        }
-
-      } catch (err) {
-        console.error('Error fetching live Google Sheet data, falling back to simulator:', err);
-        setConnectionError('تعذر الاتصال بالرابط المدخل. يرجى التأكد من تفعيل النشر لـ "الجميع (Anyone)" في قوقل شيت.');
-        loadFromLocalFallback();
+      } else {
+        console.warn('Could not parse Google Sheets response. Falling back to offline simulator.');
       }
-    } else {
-      // Load from Local Storage or defaults
-      loadFromLocalFallback();
-    }
-    setLoading(false);
-  };
-
-  const loadFromLocalFallback = () => {
-    const savedLessons = localStorage.getItem('calligraphy_lessons');
-    if (savedLessons) {
-      try {
-        setLessons(JSON.parse(savedLessons));
-      } catch (e) {
-        setLessons(INITIAL_LESSONS);
-      }
-    } else {
-      setLessons(INITIAL_LESSONS);
-      localStorage.setItem('calligraphy_lessons', JSON.stringify(INITIAL_LESSONS));
+    } catch (e) {
+      console.error('Failed fetching live sheet data:', e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
-  // Intercept lesson selection to fetch previously saved data if any
-  const handleSelectLesson = async (lesson: LessonItem) => {
-    if (lesson.isSaved && config.useLiveConnection && config.webAppUrl) {
-      setLoading(true);
-      setStatusMessage('جاري استرداد الملاحظات والدرجات والوسائط المحفوظة من الشيت...');
-      try {
-        const response = await fetch(`/api/sheets?url=${encodeURIComponent(config.webAppUrl)}&action=getSavedData&row=${lesson.row}`);
-        if (response.ok) {
-          const savedData = await response.json();
-          const detailedLesson: LessonItem = {
-            ...lesson,
-            notes: savedData.notes || '',
-            imageGrade: savedData.imageGrade || '',
-            audioGrade: savedData.audioGrade || '',
-            modifiedImageUrl: savedData.modifiedImage || lesson.imageUrl || '',
-            additionalImageUrl: savedData.additionalImage || '',
-            additionalVideoUrl: savedData.video || '',
-            additionalAudioUrl: savedData.audio || '',
-          };
-          setSelectedLesson(detailedLesson);
-        } else {
-          setSelectedLesson(lesson);
-        }
-      } catch (err) {
-        console.error('Failed to load saved correction data:', err);
-        setSelectedLesson(lesson);
-      }
-      setLoading(false);
+  const handleSaveSettings = (updated: AppSettings) => {
+    setSettings(updated);
+    localStorage.setItem('appSettings', JSON.stringify(updated));
+    if (updated.googleAppsScriptUrl) {
+      setIsDatabaseMocked(false);
+      fetchLiveDatabase(updated.googleAppsScriptUrl);
     } else {
-      setSelectedLesson(lesson);
+      setIsDatabaseMocked(true);
+      setStudents(initialMockStudents);
     }
   };
 
-  // Save new configuration
-  const handleSaveConfig = (newConfig: AppConfig) => {
-    setConfig(newConfig);
-    localStorage.setItem('calligraphy_sheets_config', JSON.stringify(newConfig));
-    loadAllData(newConfig);
+  const handleLogin = (user: string) => {
+    setCurrentUser(user);
+    setIsLoggedIn(true);
   };
 
-  // Login handler
-  const handleLoginSuccess = (username: string) => {
-    setCurrentUser(username);
-  };
-
-  // Logout handler
   const handleLogout = () => {
     localStorage.removeItem('loggedInUser');
     setCurrentUser(null);
+    setIsLoggedIn(false);
   };
 
-  // Save lesson correction handler
-  const handleSaveCorrection = async (formData: {
-    notes: string;
-    imageGrade: string;
-    audioGrade: string;
-    additionalImage: string;
-    additionalVideo: string;
-    additionalAudio: string;
-  }) => {
-    if (!selectedLesson) return;
+  // Select a student row for correction
+  const handleSelectLesson = (row: StudentRow, editMode = false) => {
+    setActiveLesson(row);
+    setIsEditing(editMode);
+    
+    // Set default grades & notes
+    setNotes(row.isSaved ? "تم التصحيح والمراجعة بنجاح.\nيرجى الاهتمام بمسار خط الأساس." : "");
+    setImageGrade(row.isSaved ? "8.5 / 10" : "");
+    setAudioGrade(row.isSaved ? "9 / 10" : "");
+    setCapturedImage(null);
+    setCapturedAudio(null);
+    setSaveStatus(null);
 
-    // Simulate saving on Local Database (localStorage)
-    const updatedLessons = lessons.map((item) => {
-      if (item.studentId === selectedLesson.studentId && item.lessonNumber === selectedLesson.lessonNumber && item.row === selectedLesson.row) {
-        return {
-          ...item,
-          isSaved: true,
-          notes: formData.notes,
-          imageGrade: formData.imageGrade,
-          audioGrade: formData.audioGrade,
-          modifiedImageUrl: canvasBase64 || item.imageUrl, // Save drawn whiteboard
-          additionalImageUrl: formData.additionalImage,
-          additionalVideoUrl: formData.additionalVideo,
-          additionalAudioUrl: formData.additionalAudio,
-          correctionDate: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          correctionCount: (item.correctionCount || 0) + 1,
+    // Load appropriate preview/canvas images
+    if (row.audioFileId && !row.imageFileId) {
+      // It's an audio-only assignment
+      setCanvasImage(null);
+      setPlayOriginalMediaUrl(mockAudios.makharijSample);
+    } else {
+      // It's an image calligraphy assignment
+      // Select appropriate beautiful sample mock images based on row
+      const imgKey = row.row % 3 === 0 ? mockImages.ruqahSample : (row.row % 2 === 0 ? mockImages.naskhSample : mockImages.diwaniSample);
+      setCanvasImage(imgKey);
+      setPlayOriginalMediaUrl(imgKey);
+    }
+  };
+
+  // DrawingBoard updates saving
+  const handleCanvasSaved = (dataUrl: string) => {
+    setCanvasImage(dataUrl);
+    setSaveStatus({ type: 'success', msg: 'تم حفظ وتوثيق لوحة الرسم مؤقتاً!' });
+    setTimeout(() => setSaveStatus(null), 2500);
+  };
+
+  // Direct Audio microphone recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      setAudioChunks([]);
+      
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          setAudioChunks(prev => [...prev, e.data]);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/mpeg' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setCapturedAudio(reader.result as string);
         };
+        reader.readAsDataURL(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecordingAudio(true);
+    } catch (e) {
+      alert('الرجاء منح صلاحية الميكروفون للتسجيل المباشر.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+      setIsRecordingAudio(false);
+    }
+  };
+
+  // Direct Webcam Capture
+  const startWebcam = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      setWebcamStream(stream);
+      setIsCapturingWebcam(true);
+    } catch (e) {
+      alert('الرجاء منح صلاحية الكاميرا للتصوير المباشر.');
+    }
+  };
+
+  const capturePhoto = () => {
+    const video = document.getElementById('webcam-video') as HTMLVideoElement;
+    if (video) {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(video, 0, 0);
+      
+      // Auto-compress to jpeg
+      const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      setCapturedImage(compressedDataUrl);
+      
+      // Stop webcam stream
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
       }
-      return item;
-    });
+      setIsCapturingWebcam(false);
+      setWebcamStream(null);
+    }
+  };
 
-    setLessons(updatedLessons);
-    localStorage.setItem('calligraphy_lessons', JSON.stringify(updatedLessons));
+  // Handle local file uploads
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCapturedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-    // If using live connection, send webhook write back to Google Apps Script
-    if (config.useLiveConnection && config.webAppUrl) {
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCapturedAudio(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Submit complete correction save
+  const handleSaveCorrection = async () => {
+    if (!activeLesson) return;
+
+    setSaveStatus({ type: 'loading', msg: 'جاري رفع الملفات وتحديث الجدول وقاعدة البيانات...' });
+
+    // Format final dates
+    const dateStr = new Date().toLocaleString('ar-EG', { timeZone: 'GMT' });
+
+    if (isDatabaseMocked) {
+      // Simulate locally
+      setTimeout(() => {
+        setStudents(prev => prev.map(item => {
+          if (item.row === activeLesson.row) {
+            return {
+              ...item,
+              isSaved: true,
+              imageSubmissionCount: item.imageSubmissionCount + 1,
+              additionalT: "تم التدقيق والمراجعة",
+              additionalY: "مسجل"
+            };
+          }
+          return item;
+        }));
+        setSaveStatus({ type: 'success', msg: '✅ تم التصحيح والرفع محلياً بنجاح! (تم تحديث سجل المحاكاة الافتراضية)' });
+        setTimeout(() => {
+          setActiveLesson(null);
+          setSaveStatus(null);
+        }, 1500);
+      }, 1500);
+    } else {
+      // Real communication with Google Apps Script Web App
       try {
-        const payload = {
-          action: 'saveAllMedia',
-          row: selectedLesson.row,
-          notes: formData.notes,
-          imageGrade: formData.imageGrade,
-          audioGrade: formData.audioGrade,
-          canvasBase64: canvasBase64, // Big modified image
-          imageBase64: formData.additionalImage,
-          videoBase64: formData.additionalVideo,
-          audioBase64: formData.additionalAudio,
-          studentId: selectedLesson.studentId,
-          studentName: selectedLesson.studentName,
-          lessonNumber: selectedLesson.lessonNumber,
-          submissionCount: selectedLesson.imageSubmissionCount || selectedLesson.audioSubmissionCount,
+        const bodyData = {
+          appsScriptUrl: settings.googleAppsScriptUrl,
+          row: activeLesson.row,
+          notes,
+          imageGrade,
+          audioGrade,
+          canvasBase64: canvasImage,
+          canvasFilename: `صورة-معدلة-${activeLesson.studentName}-${activeLesson.studentId}.jpg`,
+          imageBase64: capturedImage,
+          imageFilename: `مرفق-إضافي-${activeLesson.studentName}-${activeLesson.studentId}.jpg`,
+          audioBase64: capturedAudio,
+          audioFilename: `صوت-إضافي-${activeLesson.studentName}-${activeLesson.studentId}.mp3`
         };
 
-        // POST to Live Google Apps Script URL via our server-side API proxy (bypasses browser CORS block)
-        const response = await fetch(`/api/sheets?url=${encodeURIComponent(config.webAppUrl)}`, {
+        const res = await fetch('/api/sheets/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(bodyData)
         });
-
-        if (!response.ok) {
-          console.warn('API returned non-200, but data was preserved locally.');
+        const result = await res.json();
+        
+        if (result.success) {
+          setSaveStatus({ type: 'success', msg: '✅ تم إرسال التصحيح، ورفع الصورة المعدلة لـ Google Drive، وتحديث الـ Google Sheet بالكامل!' });
+          // Fetch fresh list
+          fetchLiveDatabase(settings.googleAppsScriptUrl);
+          setTimeout(() => {
+            setActiveLesson(null);
+            setSaveStatus(null);
+          }, 2000);
+        } else {
+          setSaveStatus({ type: 'error', msg: `فشل الحفظ: ${result.message || 'حدث خطأ في الرفع'}` });
         }
-      } catch (e) {
-        console.error('Failed to post live data back to Sheet:', e);
+      } catch (e: any) {
+        setSaveStatus({ type: 'error', msg: `عفواً، فشل الاتصال بخادم جوجل: ${e.message}` });
       }
     }
-
-    // Refresh general list data
-    await new Promise((resolve) => setTimeout(resolve, 800));
-  };
-
-  // Calculations for Stats
-  const stats = {
-    total: lessons.length,
-    corrected: lessons.filter((l) => l.isSaved).length,
-    pending: lessons.filter((l) => !l.isSaved).length,
   };
 
   return (
-    <div className="min-h-screen bg-[#111111] text-zinc-100 flex flex-col font-sans selection:bg-[#d4a017] selection:text-zinc-950" id="main-app-container">
+    <div className="min-h-screen bg-slate-50 font-sans flex flex-col antialiased" dir="rtl">
       
-      {/* 1. Header Bar */}
-      <Header
-        profile={profile}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        onOpenConfig={() => setConfigOpen(true)}
-        stats={stats}
-      />
+      {/* Required Authorization Barrier */}
+      {!isLoggedIn && (
+        <LoginModal 
+          onLoginSuccess={handleLogin} 
+          usersList={settings.users} 
+        />
+      )}
 
-      {/* 2. Main Workspace */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-8 space-y-6">
-
-        {/* Global Loading overlay */}
-        {loading && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex items-center justify-center gap-3 animate-pulse text-zinc-300">
-            <RefreshCw className="w-5 h-5 text-[#d4a017] animate-spin" />
-            <span className="text-sm font-medium">{statusMessage}</span>
-          </div>
-        )}
-
-        {/* Active connection mode banner */}
-        {!loading && (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-zinc-900/40 border border-zinc-850 px-4 py-3 rounded-2xl text-xs text-zinc-400 text-right" dir="rtl">
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-[#d4a017]" />
-              <span>مصدر قاعدة البيانات الحالي: </span>
-              <strong className={config.useLiveConnection ? 'text-amber-500' : 'text-zinc-300'}>
-                {config.useLiveConnection ? 'متصل حياً بقوقل شيت (Google Sheets API)' : 'المحاكي المحلي النشط (بيانات محفوظة ذاتياً)'}
-              </strong>
+      {/* Modern High-End Top Navigation Header */}
+      <header className="bg-slate-900 text-white shadow-xl sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+          
+          {/* Logo & Brand title */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <img src={settings.profileLogo} alt="Logo" className="w-8 h-8 object-contain" />
             </div>
+            <div className="text-right">
+              <h1 className="font-black text-base tracking-tight">{settings.profileName}</h1>
+              <p className="text-[10px] text-emerald-400 font-medium">{settings.profileSub}</p>
+            </div>
+          </div>
+
+          {/* Connection Status Badge */}
+          <div className="hidden md:flex items-center gap-2 bg-slate-850 px-3 py-1.5 rounded-xl border border-slate-800">
+            {isDatabaseMocked ? (
+              <span className="flex items-center gap-1.5 text-xs text-amber-400 font-semibold">
+                <Database className="w-3.5 h-3.5 animate-pulse" />
+                المحاكاة الافتراضية (بدون ربط)
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold animate-fade-in">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                متصل بـ Google Sheets مباشر
+              </span>
+            )}
+          </div>
+
+          {/* User Account Controls */}
+          <div className="flex items-center gap-3">
+            {currentUser && (
+              <div className="bg-slate-850 px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-semibold text-slate-300 hidden sm:block">
+                مرحباً بك: {currentUser}
+              </div>
+            )}
             
             <button
-              onClick={() => setConfigOpen(true)}
-              className="text-xs text-[#d4a017] hover:underline font-bold flex items-center gap-1 cursor-pointer"
+              onClick={handleLogout}
+              className="p-2 rounded-lg bg-slate-850 hover:bg-red-500/10 text-slate-400 hover:text-red-400 border border-slate-800 transition-all cursor-pointer"
+              title="خروج"
             >
-              تغيير إعدادات الاتصال بالشيت
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
-        )}
 
-        {/* Connection Error Warning Banner */}
-        {connectionError && (
-          <div className="bg-red-950/40 border border-red-500/20 text-red-200 p-4 rounded-2xl flex items-start gap-3 text-xs md:text-sm text-right" dir="rtl">
-            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5 animate-pulse" />
-            <div className="space-y-1 text-right">
-              <p className="font-bold text-red-300">تنبيه اتصال بقاعدة البيانات (Google Sheets):</p>
-              <p className="opacity-90 leading-relaxed text-zinc-300">{connectionError}</p>
+        </div>
+      </header>
+
+      {/* Tab select bar */}
+      {isLoggedIn && !activeLesson && (
+        <div className="bg-white border-b border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex gap-6 -mb-px">
+              <button
+                onClick={() => setActiveTab('students')}
+                className={`py-4 px-2 text-xs md:text-sm font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'students' 
+                    ? 'border-emerald-500 text-emerald-600' 
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>قائمة الطلاب والدروس المرسلة</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`py-4 px-2 text-xs md:text-sm font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'settings' 
+                    ? 'border-emerald-500 text-emerald-600' 
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <SettingsIcon className="w-4 h-4" />
+                <span>لوحة التحكم وإعدادات الربط</span>
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
+      {/* Main Body */}
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         <AnimatePresence mode="wait">
-          {/* USER NOT AUTHENTICATED -> SHOW LOGIN */}
-          {!currentUser ? (
+          {isLoggedIn && (
             <motion.div
-              initial={{ opacity: 0, y: 15 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              key="login"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="h-full"
             >
-              <LoginModal onLoginSuccess={handleLoginSuccess} />
-            </motion.div>
-          ) : selectedLesson ? (
-            /* INDIVIDUAL LESSON ACTIVE VIEW WORKSPACE */
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              key="workspace"
-              className="space-y-6"
-            >
-              {/* Back to List breadcrumb */}
-              <div className="flex items-center justify-between" dir="rtl">
-                <h2 className="text-base font-bold text-zinc-300">مساحة تصحيح الدرس الفردي</h2>
-                <button
-                  onClick={() => setSelectedLesson(null)}
-                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 rounded-xl border border-zinc-800 hover:text-[#d4a017] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  العودة لقائمة الدروس العامة
-                </button>
-              </div>
+              
+              {/* Correction Workspace Panel */}
+              {activeLesson ? (
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                  
+                  {/* Left Column: Drawing board/Audio player */}
+                  <div className="xl:col-span-2 space-y-6 flex flex-col h-[700px] xl:h-[780px]">
+                    
+                    {/* Header back bar */}
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => setActiveLesson(null)}
+                        className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2 cursor-pointer shadow-sm"
+                      >
+                        <ArrowRight className="w-4 h-4 text-slate-400" />
+                        <span>العودة لجدول الدروس</span>
+                      </button>
+                      <span className="text-xs font-bold text-slate-500">
+                        {activeLesson.imageFileId ? 'سبورة الرسم الذكية للتصحيح' : 'مستمع تلاوة الصوتيات'}
+                      </span>
+                    </div>
 
-              {/* Display Canvas Board if Image lesson OR Audio Player if Audio lesson */}
-              {selectedLesson.imageFileId ? (
-                <div className="space-y-3">
-                  <div className="bg-zinc-900/60 border border-zinc-850 p-4 rounded-xl text-right text-xs text-zinc-400" dir="rtl">
-                    💡 <b>ملاحظة للسبورة:</b> يمكنك استخدام بكرة الفأرة للتكبير والتصغير أو سحب الصورة لتحريكها بعد تفعيل زر <b>(تحريك وحركة)</b> بالأعلى لمعاينة أدق كراسات الخطوط ذات الجودة العالية.
+                    {/* Interactive Canvas / Audio container */}
+                    <div className="flex-1 min-h-0">
+                      {activeLesson.imageFileId ? (
+                        <DrawingBoard
+                          imageSrc={canvasImage}
+                          onSave={handleCanvasSaved}
+                          predefinedTexts={settings.predefinedTexts}
+                          stickersList={[]}
+                        />
+                      ) : (
+                        <div className="h-full flex flex-col justify-center">
+                          <AudioPlayer
+                            audioSrc={playOriginalMediaUrl}
+                            studentName={activeLesson.studentName}
+                            lessonNumber={activeLesson.lessonNumber}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <CanvasBoard
-                    imageUrl={selectedLesson.modifiedImageUrl || selectedLesson.imageUrl || ''}
-                    predefinedTexts={predefinedTexts}
-                    stickers={stickers}
-                    watermark={watermark}
-                    studentId={selectedLesson.studentId}
-                    studentName={selectedLesson.studentName}
-                    lessonNumber={selectedLesson.lessonNumber}
-                    onSaveCanvasState={(base64) => setCanvasBase64(base64)}
-                  />
+
+                  {/* Right Column: Submission Form, Grades & Custom Attachment Uploads */}
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6">
+                      
+                      <div className="space-y-1">
+                        <h3 className="font-extrabold text-lg text-slate-900">تقييم وتسجيل الدرجة للدرس</h3>
+                        <p className="text-xs text-slate-500">سيتم حفظ الدرجات وتعديل حالة الصف بالكامل في Google Sheet</p>
+                      </div>
+
+                      {/* Display Grades Inputs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {activeLesson.imageFileId && (
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-bold text-slate-700">درجة الصورة (من 10):</label>
+                            <input
+                              type="text"
+                              value={imageGrade}
+                              onChange={e => setImageGrade(e.target.value)}
+                              placeholder="مثال: 9.5 / 10"
+                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-mono"
+                            />
+                          </div>
+                        )}
+                        {activeLesson.audioFileId && (
+                          <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                            <label className="block text-xs font-bold text-slate-700">درجة التلاوة/الصوت (من 10):</label>
+                            <input
+                              type="text"
+                              value={audioGrade}
+                              onChange={e => audioGrade(e.target.value)}
+                              placeholder="مثال: 9 / 10"
+                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-mono"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Written teacher notes */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-slate-700">الملاحظات والتوجيهات المكتوبة:</label>
+                        <textarea
+                          value={notes}
+                          onChange={e => setNotes(e.target.value)}
+                          placeholder="اكتب التوجيهات والملاحظات للطالب هنا بالتفصيل ليرسل في عمود الملاحظات..."
+                          rows={4}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-xs"
+                        />
+                      </div>
+
+                      {/* Custom media camera/microphone capture section */}
+                      <div className="space-y-4 border-t border-slate-100 pt-5">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                          <Plus className="w-4 h-4 text-emerald-500" />
+                          <span>إضافة توثيق إضافي (مرفقات اختيارية للرفع):</span>
+                        </div>
+
+                        {/* Webcam capture area */}
+                        {isCapturingWebcam && (
+                          <div className="bg-slate-950 p-2.5 rounded-2xl border border-slate-800 space-y-2.5">
+                            <video id="webcam-video" autoplay playsinline className="w-full h-40 object-cover rounded-lg bg-black" />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={capturePhoto}
+                                className="flex-1 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold hover:bg-emerald-600 transition"
+                              >
+                                التقاط الصورة الآن
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (webcamStream) webcamStream.getTracks().forEach(track => track.stop());
+                                  setIsCapturingWebcam(false);
+                                }}
+                                className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold"
+                              >
+                                إلغاء
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Control buttons bar for capture */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={startWebcam}
+                            className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl flex flex-col items-center gap-1.5 text-slate-600 transition cursor-pointer"
+                          >
+                            <Camera className="w-4 h-4 text-emerald-500" />
+                            <span className="text-[10px] font-bold">التقاط كاميرا</span>
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={isRecordingAudio ? stopRecording : startRecording}
+                            className={`p-3 border rounded-xl flex flex-col items-center gap-1.5 transition cursor-pointer ${
+                              isRecordingAudio 
+                                ? 'bg-red-50 border-red-200 text-red-600' 
+                                : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
+                            }`}
+                          >
+                            <Mic className={`w-4 h-4 ${isRecordingAudio ? 'animate-pulse text-red-500' : 'text-emerald-500'}`} />
+                            <span className="text-[10px] font-bold">
+                              {isRecordingAudio ? 'إيقاف التسجيل' : 'تسجيل صوت'}
+                            </span>
+                          </button>
+
+                          <label className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1.5 text-slate-600 transition cursor-pointer">
+                            <Upload className="w-4 h-4 text-emerald-500" />
+                            <span className="text-[10px] font-bold">رفع ملف</span>
+                            <input
+                              type="file"
+                              accept="image/*,audio/*"
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  if (file.type.startsWith('image/')) {
+                                    handleImageUpload(e);
+                                  } else {
+                                    handleAudioUpload(e);
+                                  }
+                                }
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+
+                        {/* Attachments preview thumbnails */}
+                        <div className="flex flex-wrap gap-3">
+                          {capturedImage && (
+                            <div className="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-emerald-500/30">
+                              <img src={capturedImage} alt="captured" className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => setCapturedImage(null)}
+                                className="absolute top-1 left-1 p-0.5 bg-red-500 text-white rounded-full hover:scale-110 transition"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+
+                          {capturedAudio && (
+                            <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex items-center gap-2.5 text-xs">
+                              <FileAudio className="w-4 h-4 text-emerald-500" />
+                              <span className="font-semibold text-slate-700">تسجيل ميكروفون جاهز</span>
+                              <button
+                                type="button"
+                                onClick={() => setCapturedAudio(null)}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded-lg"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+
+                      {/* Display Submit & Action status messages */}
+                      {saveStatus && (
+                        <div className={`p-3 rounded-xl border flex items-center gap-2 text-xs font-semibold ${
+                          saveStatus.type === 'success' 
+                            ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
+                            : saveStatus.type === 'error' 
+                            ? 'bg-red-50 border-red-100 text-red-700'
+                            : 'bg-indigo-50 border-indigo-100 text-indigo-800'
+                        }`}>
+                          {saveStatus.type === 'loading' && (
+                            <span className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                          )}
+                          <span>{saveStatus.msg}</span>
+                        </div>
+                      )}
+
+                      {/* Submit action */}
+                      <button
+                        onClick={handleSaveCorrection}
+                        disabled={saveStatus?.type === 'loading'}
+                        className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10 cursor-pointer disabled:opacity-50"
+                      >
+                        <Save className="w-5 h-5" />
+                        <span>حفظ وإرسال جميع البيانات شيت جوجل</span>
+                      </button>
+
+                    </div>
+                  </div>
+
                 </div>
               ) : (
-                <div className="bg-zinc-900/40 border border-zinc-850 p-6 rounded-2xl space-y-4">
-                  <div className="text-right">
-                    <h3 className="text-sm font-bold text-zinc-300 mb-1">استماع لدروس تلاوة أو شرح الطالب الشفهي:</h3>
-                    <p className="text-xs text-zinc-500">تم تنزيل وتسهيل مشغل الصوت المتطور للتحكم في السرعات بسلاسة تامة.</p>
-                  </div>
-                  <AudioPlayer src={selectedLesson.audioUrl || ''} title={`تسجيل الطالب: ${selectedLesson.studentName} (الدرس ${selectedLesson.lessonNumber})`} />
+                // Dashboard Tables View
+                <div className="space-y-8">
+                  {/* Sync status alert if using actual backend */}
+                  {!isDatabaseMocked && isSyncing && (
+                    <div className="p-4 bg-indigo-50 border border-indigo-100 text-indigo-800 rounded-2xl flex items-center justify-between">
+                      <span className="text-xs font-bold flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                        جاري مزامنة وسحب أحدث تلاوات ودروس الطلاب المسجلة في شيت جوجل...
+                      </span>
+                    </div>
+                  )}
+
+                  {activeTab === 'students' ? (
+                    <StudentTable
+                      data={students}
+                      onCorrect={(row) => handleSelectLesson(row, false)}
+                      onEdit={(row) => handleSelectLesson(row, true)}
+                    />
+                  ) : (
+                    <SettingsPanel
+                      settings={settings}
+                      onSaveSettings={handleSaveSettings}
+                      onRefreshFromGoogle={() => fetchLiveDatabase(settings.googleAppsScriptUrl)}
+                      isLoading={isSyncing}
+                    />
+                  )}
                 </div>
               )}
 
-              {/* Grading input and feedback form below */}
-              <GradeForm
-                studentName={selectedLesson.studentName}
-                studentId={selectedLesson.studentId}
-                lessonNumber={selectedLesson.lessonNumber}
-                mediaType={selectedLesson.imageFileId ? 'image' : 'audio'}
-                originalFileId={selectedLesson.imageFileId || selectedLesson.audioFileId}
-                onOpenOriginalMedia={() => setPreviewOriginalMediaOpen(true)}
-                onSaveCorrection={handleSaveCorrection}
-                onBack={() => setSelectedLesson(null)}
-              />
-            </motion.div>
-          ) : (
-            /* LESSONS LIST VIEW OVERVIEW */
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              key="list"
-            >
-              <LessonList
-                lessons={lessons}
-                onSelectLesson={handleSelectLesson}
-              />
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Database configurations modal */}
-        {configOpen && (
-          <SheetsConfig
-            config={config}
-            onSaveConfig={handleSaveConfig}
-            onClose={() => setConfigOpen(false)}
-          />
-        )}
-
-        {/* Large Original Media Lightbox/Preview modal */}
-        {previewOriginalMediaOpen && selectedLesson && (
-          <div className="fixed inset-0 bg-black/95 backdrop-blur flex items-center justify-center p-4 z-[60] animate-fade-in" id="original-media-lightbox">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
-              
-              {/* Header */}
-              <div className="bg-zinc-950 p-4 border-b border-zinc-850 flex items-center justify-between" dir="rtl">
-                <span className="text-sm font-bold text-zinc-300">معاينة الملف الأصلي الكبير المرسل من الطالب</span>
-                <button
-                  onClick={() => setPreviewOriginalMediaOpen(false)}
-                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-400 hover:text-zinc-200 rounded-lg text-xs cursor-pointer"
-                >
-                  إغلاق النافذة
-                </button>
-              </div>
-
-              {/* Content body */}
-              <div className="p-6 flex-1 overflow-auto flex items-center justify-center bg-zinc-950">
-                {selectedLesson.imageFileId ? (
-                  <img
-                    src={selectedLesson.imageUrl}
-                    alt="كراسة الطالب الأصلية"
-                    className="max-w-full max-h-[70vh] object-contain rounded border border-zinc-800 shadow-xl"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-full max-w-md">
-                    <AudioPlayer src={selectedLesson.audioUrl || ''} title="التسجيل الصوتي الأصلي دون أي تعديل" />
-                  </div>
-                )}
-              </div>
-
-            </div>
-          </div>
-        )}
-
       </main>
-
-      {/* 3. Footer info */}
-      <footer className="py-6 px-4 border-t border-zinc-900/80 bg-zinc-950 text-center text-xs text-zinc-500 font-sans leading-normal">
-        <p>جميع الحقوق محفوظة © {new Date().getFullYear()} – أكاديمية تصحيح كراسات ومقاطع الخطاطين والطلاب السحابية</p>
-        <p className="mt-1 opacity-60">مبني ومطور بتقنيات الويب السحابية السريعة ومتكامل مع جداول بيانات قوقل الآمنة</p>
-      </footer>
-
     </div>
   );
 }

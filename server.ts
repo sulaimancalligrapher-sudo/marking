@@ -1,154 +1,121 @@
-import express from "express";
-import path from "path";
-import { createServer as createViteServer } from "vite";
-import { Readable } from "stream";
+import express from 'express';
+import path from 'path';
+import dotenv from 'dotenv';
+import { createServer as createViteServer } from 'vite';
 
-async function startServer() {
+dotenv.config();
+
+const PORT = 3000;
+const isProd = process.env.NODE_ENV === 'production';
+
+async function bootstrap() {
   const app = express();
-  const PORT = 3000;
+  
+  // Parse large base64 attachments safely
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  // Increase body size limits for large canvas base64 images and audio uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // API Route 1: Proxy database retrieval from Google Sheets Apps Script
+  app.post('/api/sheets/data', async (req, res) => {
+    const { appsScriptUrl } = req.body;
+    if (!appsScriptUrl) {
+      return res.status(400).json({ success: false, message: 'Google Apps Script URL is required.' });
+    }
 
-  // API Proxy Route for Google Drive files (to play audio without CORS or Google restrictions)
-  app.get("/api/drive-proxy", async (req, res) => {
     try {
-      const fileId = req.query.id as string;
-      if (!fileId) {
-        return res.status(400).send("Missing Google Drive file ID.");
-      }
-
-      const targetUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
-      console.log(`[Drive Proxy] Streaming file ID: ${fileId}`);
-
-      const response = await fetch(targetUrl);
+      // Fetch the table items by requesting the Apps Script endpoint
+      // We append a query param to tell Code.gs what to do, or Code.gs can handle it natively.
+      const urlWithAction = `${appsScriptUrl}?action=getAppConfig`;
+      
+      const response = await fetch(urlWithAction, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
       if (!response.ok) {
-        return res.status(response.status).send("Failed to retrieve file from Google Drive.");
+        throw new Error(`Google server returned status: ${response.status}`);
       }
 
-      // Forward content type
-      const contentType = response.headers.get("content-type");
-      if (contentType) {
-        res.setHeader("Content-Type", contentType);
-      } else {
-        res.setHeader("Content-Type", "audio/mpeg");
+      // Read text first since Apps Script redirect might return HTML or raw string
+      const text = await response.text();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (err) {
+        // Fallback or retry on redirect
+        return res.json({ 
+          success: true, 
+          data: [], 
+          rawText: text,
+          message: 'Connection checked, but response was not valid JSON.' 
+        });
       }
 
-      // Stream download to the client
-      if (response.body) {
-        Readable.from(response.body as any).pipe(res);
-      } else {
-        res.end();
-      }
-    } catch (error: any) {
-      console.error("[Drive Proxy Error]:", error);
-      res.status(500).send(error.message || "Failed to proxy Google Drive file.");
+      res.json({ success: true, data: parsed });
+    } catch (e: any) {
+      console.error('Error fetching Sheets data:', e);
+      res.status(500).json({ success: false, message: e.message });
     }
   });
 
-  // API Proxy Route for Google Sheets Web App (to bypass CORS issues)
-  app.get("/api/sheets", async (req, res) => {
+  // API Route 2: Proxy save all correction media & update sheet
+  app.post('/api/sheets/save', async (req, res) => {
+    const { appsScriptUrl, ...savePayload } = req.body;
+    if (!appsScriptUrl) {
+      return res.status(400).json({ success: false, message: 'Google Apps Script URL is required.' });
+    }
+
     try {
-      const webAppUrl = req.query.url as string;
-      if (!webAppUrl) {
-        return res.status(400).json({ error: "Missing Google Sheets Web App URL ('url' parameter)." });
-      }
-
-      // Construct target URL and forward all query params except 'url'
-      const targetUrl = new URL(webAppUrl);
-      for (const [key, value] of Object.entries(req.query)) {
-        if (key !== "url" && typeof value === "string") {
-          targetUrl.searchParams.set(key, value);
-        }
-      }
-
-      console.log(`[Sheets Proxy GET] Fetching from: ${targetUrl.toString()}`);
-
-      const response = await fetch(targetUrl.toString(), {
-        method: "GET",
+      // Send parameters directly as POST to the Web App URL
+      const response = await fetch(appsScriptUrl, {
+        method: 'POST',
         headers: {
-          "Accept": "application/json",
+          'Content-Type': 'application/json'
         },
+        body: JSON.stringify(savePayload)
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: `Google Sheets returned an error: ${errorText}` });
+        throw new Error(`Google write failed with status: ${response.status}`);
       }
 
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        const data = await response.json();
-        res.json(data);
-      } else {
-        const text = await response.text();
-        try {
-          // Attempt to parse as JSON anyway in case header was plain/text
-          res.json(JSON.parse(text));
-        } catch {
-          res.send(text);
-        }
-      }
-    } catch (error: any) {
-      console.error("[Sheets Proxy GET Error]:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch data from Google Sheets through proxy." });
+      const textResponse = await response.text();
+      res.json({ success: true, response: textResponse });
+    } catch (e: any) {
+      console.error('Error saving Sheets correction data:', e);
+      res.status(500).json({ success: false, message: e.message });
     }
   });
 
-  app.post("/api/sheets", async (req, res) => {
-    try {
-      const webAppUrl = req.query.url as string || req.headers["x-sheets-url"] as string;
-      if (!webAppUrl) {
-        return res.status(400).json({ error: "Missing Google Sheets Web App URL." });
-      }
-
-      console.log(`[Sheets Proxy POST] Posting to: ${webAppUrl}`);
-
-      const response = await fetch(webAppUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(req.body),
-      });
-
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        const data = await response.json();
-        res.status(response.status).json(data);
-      } else {
-        const text = await response.text();
-        try {
-          res.status(response.status).json(JSON.parse(text));
-        } catch {
-          res.status(response.status).send(text);
-        }
-      }
-    } catch (error: any) {
-      console.error("[Sheets Proxy POST Error]:", error);
-      res.status(500).json({ error: error.message || "Failed to send data to Google Sheets through proxy." });
-    }
+  // Health check
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
-  // Vite middleware for development or serving production dist files
-  if (process.env.NODE_ENV !== "production") {
+  // Integrate Vite Dev Server Middleware or static assets delivery
+  if (!isProd) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: 'spa'
     });
     app.use(vite.middlewares);
+    console.log('Vite middleware mounted in development mode.');
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
     });
+    console.log('Serving production static files from dist.');
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server fully up and running on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+bootstrap().catch(err => {
+  console.error('Fatal server boot failure:', err);
+});
