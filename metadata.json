@@ -1,9 +1,10 @@
 {
-  "name": "لوحة تصحيح الدروس التفاعلية",
-  "description": "منصة تصحيح تفاعلية متصلة بجداول قوقل (Google Sheets) ومجلدات قوقل درايف (Google Drive) لتصحيح صور الدروس وتسجيلات الطلاب.",
+  "name": "لوحة تصحيح الدروس والخط العربي",
+  "description": "منصة احترافية لتصحيح دروس الطلاب (صورة وصوت) مع سبورة تفاعلية تدعم القلم المشطوف للخط العربي والملاحظات الصوتية والمرفقات متصلة بقوقل شيت",
   "requestFramePermissions": [
     "camera",
-    "microphone"
+    "microphone",
+    "geolocation"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

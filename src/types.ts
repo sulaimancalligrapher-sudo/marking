@@ -1,13 +1,25 @@
-export interface StudentLesson {
-  studentId: string | number;
+export interface LessonItem {
+  studentId: string;
   studentName: string;
-  lessonNumber: string | number;
+  lessonNumber: number;
   imageSubmissionCount: number;
-  imageFileId: string | null;
-  imageMimeType: string | null;
+  imageUrl?: string;
+  imageFileId?: string | null;
+  imageMimeType?: string | null;
   audioSubmissionCount: number;
-  audioFileId: string | null;
-  audioMimeType: string | null;
+  audioUrl?: string;
+  audioFileId?: string | null;
+  audioMimeType?: string | null;
+  isSaved: boolean;
+  notes: string;
+  imageGrade: string;
+  modifiedImageUrl: string;
+  audioGrade: string;
+  additionalImageUrl: string;
+  additionalVideoUrl: string;
+  additionalAudioUrl: string;
+  correctionDate: string;
+  correctionCount: number;
   additionalT: string;
   additionalU: string;
   additionalV: string;
@@ -15,16 +27,20 @@ export interface StudentLesson {
   additionalX: string;
   additionalY: string;
   row: number;
-  isSaved: boolean;
-  notes: string;
-  imageGrade: string;
-  audioGrade: string;
-  modifiedImageUrl: string;
-  additionalImageUrl: string;
-  videoUrl: string;
-  audioUrl: string;
-  date: string;
-  correctionCounter: number;
+  mediaType: 'image' | 'audio';
+}
+
+export interface ProfileData {
+  logoUrl: string;
+  title: string;
+  subtitle: string;
+}
+
+export interface ContactData {
+  facebook: string;
+  instagram: string;
+  youtube: string;
+  line: string;
 }
 
 export interface PredefinedText {
@@ -32,9 +48,14 @@ export interface PredefinedText {
   phrase: string;
 }
 
-export interface Sticker {
+export interface StickerItem {
   fileId: string;
-  name: string;
+  url: string;
+}
+
+export interface UserAuth {
+  username: string;
+  status: string; // 'نعم' أو 'لا'
 }
 
 export interface WatermarkSettings {
@@ -47,60 +68,7 @@ export interface WatermarkSettings {
   textPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
 }
 
-export interface ProfileInfo {
-  logoUrl: string;
-  name: string;
-  description: string;
-}
-
-export interface ContactInfo {
-  facebook: string;
-  instagram: string;
-  youtube: string;
-  line: string;
-}
-
-export interface SheetUser {
-  username: string;
-  status: 'نعم' | 'لا';
-}
-
-export interface DrawingPoint {
-  x: number;
-  y: number;
-  pressure: number;
-}
-
-export interface DrawingPath {
-  points: DrawingPoint[];
-  lineWidth: number;
-  lineColor: string;
-  isChisel: boolean;
-  nibAngle: number;
-}
-
-export interface PlacedSticker {
-  x: number;
-  y: number;
-  base64: string;
-  size: number;
-}
-
-export interface PlacedText {
-  lines: string[];
-  x: number;
-  y: number;
-  color: string;
-  fontSize: number;
-  fontFamily: string;
-  background: {
-    enabled: boolean;
-    color: string;
-  };
-}
-
-export interface HistoryAction {
-  type: 'path' | 'sticker' | 'text';
-  data: any;
-  index: number;
+export interface AppConfig {
+  webAppUrl: string;
+  useLiveConnection: boolean;
 }
